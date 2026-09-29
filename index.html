@@ -1,0 +1,1875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rip Current Detection with MobileNetV3-Large: Dataset Size Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EAF0EF; --surface:#F7FAF9; --surface-2:#DFE8E7; --ink:#0F2A33; --muted:#4B6570; --line:#C4D3D2;
+  --water-deep:#0E3645; --water-mid:#1B5E6B; --water-shallow:#4E9C9A; --sand:#D8CBAA; --foam:#F6FBFA;
+  --rip:#7A5A2E; --good:#1E7F63; --bad:#A2412A; --focus:#2C5C91;
+  --c-baseline:#56686F; --c-aug_v1:#23918A; --c-v2:#2C5C91; --c-aug_v2:#B3741E;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#091B22; --surface:#0F262E; --surface-2:#15323B; --ink:#E2EDEB; --muted:#94ACB1; --line:#23434C;
+    --rip:#C99C5C; --good:#4FC49D; --bad:#E0775C; --focus:#7FB0E6;
+    --c-baseline:#9FB0B6; --c-aug_v1:#4CC6BD; --c-v2:#79A8DD; --c-aug_v2:#E3A74E;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#091B22; --surface:#0F262E; --surface-2:#15323B; --ink:#E2EDEB; --muted:#94ACB1; --line:#23434C;
+  --rip:#C99C5C; --good:#4FC49D; --bad:#E0775C; --focus:#7FB0E6;
+  --c-baseline:#9FB0B6; --c-aug_v1:#4CC6BD; --c-v2:#79A8DD; --c-aug_v2:#E3A74E;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 64px); scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+img,svg{max-width:100%}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:4px}
+h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0;font-weight:700;letter-spacing:-0.015em}
+h2{font-size:clamp(1.9rem,3.6vw,2.7rem);font-variation-settings:"opsz" 72}
+h3{font-size:1.2rem;font-weight:650;letter-spacing:-0.005em}
+p{margin:0 0 1em;max-width:68ch}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1140px;margin:0 auto;padding:0 clamp(18px,4vw,40px)}
+
+/* Nav */
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none;height:54px}
+.nav .wrap::-webkit-scrollbar{display:none}
+.nav .brand{font-family:var(--display);font-weight:700;margin-right:auto;white-space:nowrap;padding-right:16px;text-decoration:none}
+.nav a.link{white-space:nowrap;text-decoration:none;color:var(--muted);font-size:.92rem;padding:6px 10px;border-radius:6px}
+.nav a.link:hover{color:var(--ink);background:var(--surface-2)}
+
+/* Hero: aerial surf zone */
+.hero{position:relative;color:var(--foam);background:var(--water-deep);overflow:hidden}
+.hero svg.scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero .wrap{position:relative;padding-top:clamp(48px,9vw,110px);padding-bottom:clamp(170px,24vw,280px)}
+.hero h1{font-size:clamp(2.1rem,5.4vw,4.3rem);font-weight:760;font-variation-settings:"opsz" 96;max-width:17ch;letter-spacing:-0.025em;line-height:1.02}
+.hero .lede{font-size:clamp(1.05rem,1.6vw,1.25rem);max-width:52ch;margin-top:22px;color:#D5E8E6}
+.hero .credits{margin-top:28px;font-size:.95rem;color:#BFD8D6;display:grid;gap:2px}
+.hero .credits strong{color:var(--foam);font-weight:600}
+.hero .rip-tag{position:absolute;font-size:.8rem;color:#F1E3C8;background:rgba(40,28,10,.45);padding:3px 8px;border-radius:4px;white-space:nowrap}
+#plume{transform-origin:50% 100%;animation:drift 9s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translateY(6px) scaleY(.97);opacity:.82}to{transform:translateY(-8px) scaleY(1.03);opacity:1}}
+@media (prefers-reduced-motion: reduce){#plume{animation:none}}
+
+section.block{padding:clamp(56px,8vw,96px) 0;border-bottom:1px solid var(--line)}
+.section-head{display:grid;gap:14px;margin-bottom:36px;max-width:760px}
+.section-head p{color:var(--muted);margin:0}
+
+/* Facts */
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border-top:2px solid var(--ink);margin-top:32px}
+.fact{padding:18px 18px 18px 0;border-bottom:1px solid var(--line)}
+.fact b{display:block;font-family:var(--display);font-size:2rem;font-weight:700;letter-spacing:-0.02em}
+.fact span{color:var(--muted);font-size:.93rem}
+.two-col{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(24px,5vw,64px);align-items:start}
+@media (max-width:860px){.two-col{grid-template-columns:1fr}}
+.metric-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.metric-list li{padding:12px 14px;background:var(--surface);border-left:3px solid var(--line);border-radius:0 6px 6px 0}
+.metric-list li.key{border-left-color:var(--rip)}
+.metric-list b{font-weight:650}
+.metric-list span{display:block;color:var(--muted);font-size:.92rem}
+
+/* Pipelines */
+.pipes{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,36px)}
+@media (max-width:900px){.pipes{grid-template-columns:1fr}}
+.pipe{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:clamp(18px,3vw,28px)}
+.pipe h3{margin-bottom:6px}
+.pipe .sub{color:var(--muted);font-size:.93rem;margin-bottom:18px}
+.nest{display:grid;gap:5px;margin:14px 0 20px}
+.nest-row{display:grid;grid-template-columns:62px 1fr;gap:10px;align-items:center;font-size:.85rem}
+.nest-row .bar{height:12px;border-radius:2px;background:var(--water-shallow);opacity:.35;position:relative}
+.nest-row .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--water-mid);border-radius:2px}
+.nest-row .lbl{text-align:right;color:var(--muted)}
+ol.steps{margin:0;padding:0;list-style:none;counter-reset:s;display:grid;gap:12px}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:30px 1fr;gap:10px}
+ol.steps li::before{content:counter(s);font-family:var(--display);font-weight:700;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;font-size:.85rem}
+ol.steps b{font-weight:650}
+ol.steps span{display:block;color:var(--muted);font-size:.92rem}
+.checks{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.checks span{font-size:.82rem;padding:4px 10px;border-radius:20px;background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good);font-weight:600}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-weight:600;color:var(--muted);border-bottom:1.5px solid var(--ink);font-size:.83rem}
+tbody tr.group-start td{border-top:1.5px solid var(--line)}
+td.best{font-weight:700}
+
+/* Experiment matrix */
+.matrix{display:grid;grid-template-columns:auto 1fr 1fr;gap:0;border:1.5px solid var(--ink);border-radius:10px;overflow:hidden;background:var(--surface)}
+.matrix .axis{font-size:.85rem;color:var(--muted);padding:12px 16px;background:var(--surface-2);font-weight:600}
+.matrix .axis.row{writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;padding:16px 10px;display:flex;align-items:center;justify-content:center}
+.matrix .corner{background:var(--surface-2)}
+.cell{padding:clamp(16px,2.5vw,26px);border-top:1px solid var(--line);border-left:1px solid var(--line);position:relative}
+.cell .swatch{display:inline-flex;align-items:center;gap:8px;font-family:var(--display);font-size:1.3rem;font-weight:700;margin-bottom:8px}
+.cell p{font-size:.93rem;color:var(--muted);margin:0 0 10px}
+.cell ul{margin:0;padding-left:18px;font-size:.88rem;color:var(--muted)}
+.cell .rq{font-size:.9rem;color:var(--ink);font-style:italic;margin-top:12px}
+@media (max-width:720px){
+  .matrix{grid-template-columns:1fr}
+  .matrix .axis,.matrix .corner{display:none}
+  .cell{border-left:none}
+  .cell::before{content:attr(data-label);display:block;font-size:.8rem;color:var(--muted);margin-bottom:6px}
+}
+.comparisons{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:22px}
+.cmp{padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.cmp .pair{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600;font-size:.95rem}
+.cmp .pair svg{flex:none}
+.cmp p{margin:6px 0 0;font-size:.9rem;color:var(--muted)}
+
+/* Results */
+.status{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:12px 16px;border-radius:8px;background:var(--surface);border:1px solid var(--line);margin-bottom:22px;font-size:.93rem}
+.status .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.status.ok .dot{background:var(--good)}
+.status.sample{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 9%,var(--surface))}
+.status.sample .dot{background:var(--bad)}
+.status .grow{flex:1;min-width:220px}
+button,select,.btn{font:inherit;font-size:.9rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover,.btn:hover{border-color:var(--ink)}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.primary:hover{opacity:.9}
+.controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;margin-bottom:14px}
+.controls label{display:grid;gap:4px;font-size:.83rem;color:var(--muted);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.legend button{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:20px}
+.legend button[aria-pressed="false"]{opacity:.45;text-decoration:line-through}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:clamp(14px,2.5vw,24px);margin-bottom:22px}
+.panel h3{margin-bottom:4px}
+.panel .note{font-size:.88rem;color:var(--muted);margin:0 0 12px}
+.chart{width:100%;overflow-x:auto}
+.chart svg{display:block;min-width:520px;width:100%;height:auto}
+.chart text{font-family:var(--body);fill:var(--muted);font-size:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media (max-width:900px){.grid-2{grid-template-columns:1fr}}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:14px 0}
+@media (max-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{padding:12px 14px;border-radius:8px;background:var(--bg);border:1px solid var(--line)}
+.card span{font-size:.8rem;color:var(--muted);font-weight:600}
+.card b{display:block;font-family:var(--display);font-size:1.55rem;font-weight:700;letter-spacing:-0.02em}
+.card.key{border-color:var(--rip)}
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;max-width:360px;font-size:.85rem;margin-top:8px}
+.cm div{padding:8px;text-align:center;border-radius:4px}
+.cm .h{color:var(--muted);font-size:.78rem;font-weight:600}
+.cm .v{background:var(--bg);border:1px solid var(--line);font-variant-numeric:tabular-nums;font-weight:600}
+.cm .v.hit{background:color-mix(in srgb,var(--good) 14%,var(--bg))}
+.cm .v.miss{background:color-mix(in srgb,var(--bad) 14%,var(--bg))}
+.meta{font-size:.82rem;color:var(--muted)}
+.delta.pos{color:var(--good);font-weight:600}
+.delta.neg{color:var(--bad);font-weight:600}
+.empty{padding:34px 16px;text-align:center;color:var(--muted);font-size:.95rem}
+
+/* Notes */
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px}
+.notes article{border-top:2px solid var(--ink);padding-top:14px}
+.notes article p{font-size:.95rem;color:var(--muted)}
+
+/* Data loader */
+details.loader{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+details.loader summary{cursor:pointer;padding:16px 20px;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:10px}
+details.loader summary::-webkit-details-marker{display:none}
+details.loader summary::after{content:"+";font-family:var(--display);font-size:1.3rem;line-height:1}
+details.loader[open] summary::after{content:"−"}
+.loader-body{padding:0 20px 20px;display:grid;gap:14px}
+textarea{width:100%;min-height:160px;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;resize:vertical}
+pre{margin:0;overflow-x:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.errors{font-size:.88rem;color:var(--bad);margin:0;padding-left:18px}
+footer{padding:48px 0 60px;font-size:.9rem;color:var(--muted)}
+footer .safety{border:1.5px solid var(--rip);border-radius:8px;padding:14px 16px;color:var(--ink);margin-bottom:22px;max-width:760px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Abstract */
+.abstract{display:grid;grid-template-columns:minmax(160px,240px) 1fr;gap:clamp(20px,5vw,64px)}
+@media (max-width:760px){.abstract{grid-template-columns:1fr}}
+.abstract .abs-body p{font-size:1.08rem;line-height:1.7}
+.abstract .abs-meta{color:var(--muted);font-size:.9rem;display:grid;gap:10px;align-content:start}
+.abstract .abs-meta b{display:block;color:var(--ink);font-weight:600}
+/* Flows */
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 22px;margin:4px 0 16px;padding:0;list-style:none}
+.flow li{position:relative;font-size:.84rem;padding:5px 10px;border:1px solid var(--line);border-radius:5px;background:var(--bg)}
+.flow li:not(:last-child)::after{content:"→";position:absolute;right:-17px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.flow li.end{border-color:var(--water-mid);font-weight:600}
+.vflow{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:18px}
+.vflow>li{position:relative;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:.9rem;max-width:360px}
+.vflow>li:not(:last-child)::after{content:"↓";position:absolute;left:18px;bottom:-19px;color:var(--muted);font-size:.9rem}
+.vflow>li.hl{border-color:var(--c-aug_v1);border-width:1.5px}
+.vflow>li.model{border-color:var(--ink);font-weight:600}
+.vflow ul{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:.85rem}
+.pipe-text{font-size:.95rem;color:var(--muted)}
+h4{font-family:var(--display);font-size:1rem;font-weight:650;margin:22px 0 10px}
+.limits{display:grid;gap:10px}
+.limit{padding:12px 14px;border-radius:0 6px 6px 0;border-left:3px solid var(--bad);background:color-mix(in srgb,var(--bad) 7%,var(--bg))}
+.limit b{display:block;font-weight:650}
+.limit span{font-size:.9rem;color:var(--muted)}
+ul.checklist{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:6px}
+ul.checklist li{display:grid;grid-template-columns:22px 1fr;font-size:.92rem}
+ul.checklist li::before{content:"✓";color:var(--good);font-weight:700}
+dl.spec{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0;font-size:.92rem}
+dl.spec dt{color:var(--muted)}
+dl.spec dd{margin:0;font-weight:600}
+.opt-cards{display:grid;gap:10px;margin-top:4px}
+.opt{padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.opt b{display:block;font-weight:650;margin-bottom:4px}
+.opt dl.spec{font-size:.88rem}
+.opt p{font-size:.88rem;color:var(--muted);margin:6px 0 0}
+/* Audit */
+.stat-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:6px 0 16px}
+.stat-pair b{display:block;font-family:var(--display);font-size:2.2rem;font-weight:700;letter-spacing:-0.02em;line-height:1.1}
+.stat-pair span{font-size:.88rem;color:var(--muted)}
+.cmpbar{display:grid;grid-template-columns:120px 1fr;gap:8px 10px;align-items:center;font-size:.85rem}
+.cmpbar .track{height:14px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.cmpbar .fill{height:100%;background:var(--rip)}
+.stack{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:6px 0 10px}
+.stack div{height:100%}
+.stack-key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.84rem;color:var(--muted)}
+.stack-key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.caption{font-size:.9rem;color:var(--ink);margin:14px 0 0}
+.exp-table td:first-child{white-space:normal}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Sections">
+  <div class="wrap">
+    <a class="brand" href="#top">Rip current study</a>
+    <a class="link" href="#abstract">Abstract</a>
+    <a class="link" href="#datasets">Datasets</a>
+    <a class="link" href="#audit">Dataset audit</a>
+    <a class="link" href="#pipeline">Training</a>
+    <a class="link" href="#experiments">Experiments</a>
+    <a class="link" href="#results">Results</a>
+    <a class="link" href="#compute">Computation</a>
+    <a class="link" href="#effects">What changed</a>
+    <a class="link" href="#reading">Notes</a>
+    <a class="link" href="#data">Load results</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <svg class="scene" id="scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+  <div class="wrap">
+    <h1>Rip Current Detection Model Using MobileNetV3-Large with Incrementing Dataset Sizes</h1>
+    <p class="lede">How much labeled footage does a lightweight neural network need before it can reliably tell a rip current from ordinary surf? One fixed model, four experiments, and nested datasets from 500 to 20,000 images.</p>
+    <div class="credits">
+      <span><strong>Rean G. Coyacot</strong> and <strong>Vicente Iñaki B. Villa</strong></span>
+      <span>Adviser: Christine F. Peña, MMath</span>
+      <span>BS Computer Science, Department of Computer, Information Sciences and Mathematics, University of San Carlos, 2026</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<section class="block" id="abstract">
+  <div class="wrap abstract">
+    <div class="abs-meta">
+      <h2>Abstract</h2>
+      <div><b>Model</b>MobileNetV3-Large, ImageNet pretrained</div>
+      <div><b>Task</b>Binary classification: rip current or no rip current</div>
+      <div><b>Data</b>RipVIS, nested sets of 500 to 20,000 images</div>
+    </div>
+    <div class="abs-body">
+      <p>Rip currents are hazardous coastal phenomena that require efficient detection systems to support coastal safety efforts. This study investigates the performance of a lightweight deep learning model for binary rip current classification using incrementally increasing dataset sizes.</p>
+      <p>A MobileNetV3-Large architecture was evaluated across eight dataset sizes ranging from 500 to 20,000 images. The study examines the influence of dataset scaling, dataset construction strategy, and training optimization techniques on classification performance and computational efficiency.</p>
+      <p>Four experimental configurations were compared: baseline training, augmented training, improved dataset construction, and combined dataset-training optimization.</p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="question">
+  <div class="wrap two-col">
+    <div>
+      <div class="section-head">
+        <h2>Why dataset size, not a bigger model</h2>
+      </div>
+      <p>Rip currents cause most surf-zone rescues, yet beachgoers rarely recognize them. Deep learning can spot them in coastal imagery, but most published work relies on heavy models and very large annotated datasets.</p>
+      <p>This study holds the model fixed and varies only the amount of labeled data. MobileNetV3-Large, initialized with ImageNet weights, is fine-tuned as a binary classifier (Rip Current vs Non-Rip Current) under identical preprocessing, training, and evaluation at every dataset size. The aim is to see how performance grows with data and where additional images start returning smaller gains.</p>
+    </div>
+    <div>
+      <h3 style="margin-bottom:12px">How performance is measured</h3>
+      <ul class="metric-list">
+        <li><b>Accuracy</b><span>Share of all test images classified correctly.</span></li>
+        <li><b>Precision</b><span>Of the images flagged as rip currents, how many really were. Low precision means false alarms.</span></li>
+        <li><b>Recall</b><span>Of the real rip currents, how many the model caught. Low recall means missed hazards.</span></li>
+        <li><b>F1-score</b><span>Balance of precision and recall.</span></li>
+        <li><b>Specificity</b><span>Of the images without a rip current, how many the model correctly cleared. A model that calls everything a rip current scores 0%, so this exposes runs that never learned the calm-water class.</span></li>
+        <li class="key"><b>F2-score</b><span>Weighs recall more heavily than precision, because missing a rip current is the costlier error. This is the headline metric throughout the page.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="facts">
+      <div class="fact"><b class="num">184</b><span>coastal videos in RipVIS</span></div>
+      <div class="fact"><b class="num">212,328</b><span>annotated frames</span></div>
+      <div class="fact"><b class="num">150 / 34</b><span>videos with / without rip currents</span></div>
+      <div class="fact"><b class="num">224 × 224</b><span>RGB input, ImageNet normalization</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="datasets">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Two ways of building the datasets</h2>
+      <p>Every dataset is nested: each smaller set is fully contained in the next larger one, so a change in performance reflects added data rather than a different random draw.</p>
+    </div>
+    <div class="pipes">
+      <div class="pipe">
+        <h3>Original pipeline</h3>
+        <div class="sub">Frames are the sampling unit. Eight nested sizes, 77% Rip Current to 23% Non-Rip Current, split 70 / 15 / 15.</div>
+        <ol class="flow" aria-label="Original dataset pipeline">
+          <li>RipVIS dataset</li><li>COCO annotations</li><li>Frame extraction</li><li>Fill each quota video by video</li><li>Nested selection</li><li class="end">500 to 20,000</li>
+        </ol>
+        <p class="pipe-text">Frames were extracted using the provided COCO annotations and sorted into rip-current and non-rip-current classes. Each class quota was then filled one video at a time, taking that video's frames in order before moving to the next. The first videos in line therefore supplied most of the images, and smaller datasets drew on only a few clips.</p>
+        <div class="nest" id="nest-original"></div>
+        <div class="table-wrap">
+          <table aria-label="Class distribution and partitioning of the original datasets">
+            <caption class="meta" style="caption-side:bottom;text-align:left;padding-top:8px">Partitions for the four proposal sizes. The added 500 to 2,000 sets follow the same 70 / 15 / 15 split.</caption><thead><tr><th>Dataset</th><th>Split</th><th>Rip</th><th>Non-rip</th><th>Total</th></tr></thead>
+            <tbody id="table2"></tbody>
+          </table>
+        </div>
+        <h4>Limitations found</h4>
+        <div class="limits">
+          <div class="limit"><b>Video contribution imbalance</b><span>Filling quotas video by video let one clip supply dozens of frames while others supplied few or none.</span></div>
+          <div class="limit"><b>Temporal similarity</b><span>Frames from the same clip are often close in time and look almost the same.</span></div>
+          <div class="limit"><b>Potential dataset bias</b><span>A bigger dataset could mean more frames of the same scenes without a matching increase in visual variety.</span></div>
+        </div>
+      </div>
+      <div class="pipe">
+        <h3>V2 pipeline</h3>
+        <div class="sub">Every dataset draws the same number of frames from the same set of videos. Eight nested sizes.</div>
+        <ol class="flow" aria-label="V2 dataset pipeline">
+          <li>RipVIS dataset</li><li>Source videos</li><li>Video-level split</li><li>Balanced video sampling</li><li>Nested dataset creation</li><li class="end">500 to 20,000</li>
+        </ol>
+        <p class="pipe-text">Instead of filling quotas one video at a time, V2 takes an equal share of frames from each source video, so every dataset size covers the same range of scenes. Both pipelines draw their test images from the same source videos; what changed is how evenly those videos are represented.</p>
+        <div class="nest" id="nest-v2"></div>
+        <ol class="steps">
+          <li><div><b>Keep each video in one split</b><span>Every frame of a video stays in exactly one of train, validation, or test, so the model is never tested on a clip it trained on.</span></div></li>
+          <li><div><b>Take an equal share from every video</b><span>Each video contributes the same number of frames, so no single clip dominates a dataset and small datasets still cover every scene.</span></div></li>
+          <li><div><b>Grow the nested sets</b><span>500 ⊂ 1,000 ⊂ 1,500 ⊂ 2,000 ⊂ 2,500 ⊂ 5,000 ⊂ 10,000 ⊂ 20,000 images, with extra small sizes to see the early part of the learning curve.</span></div></li>
+          <li><div><b>Audit before training</b><span>Automated checks confirm the dataset is sound before any model sees it.</span></div></li>
+        </ol>
+        <h4>Verification results</h4>
+        <ul class="checklist">
+          <li>No video leakage detected</li>
+          <li>Dataset nestedness verified</li>
+          <li>Class distribution checked</li>
+          <li>Image dimensions validated (RGB, 224 × 224)</li>
+          <li>All 8 datasets successfully generated</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="audit">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Dataset audit: why V2 was built</h2>
+      <p>Before rebuilding, the original 20,000-image dataset was checked for how its frames were spread across source videos and how close together in time they were.</p>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Video contribution</h3>
+        <p class="note">Frames per source video, original 20,000-image dataset.</p>
+        <div class="stat-pair">
+          <div><b class="num">2,126</b><span>most frames from one video</span></div>
+          <div><b class="num">45</b><span>median frames per video</span></div>
+        </div>
+        <div class="cmpbar">
+          <span>Largest video</span><div class="track"><div class="fill" style="width:100%"></div></div>
+          <span>Median video</span><div class="track"><div class="fill" style="width:2.1%"></div></div>
+        </div>
+        <p class="caption">The largest single video contributed about 47 times as many frames as the median video, so a few clips could shape what the model learned.</p>
+      </div>
+      <div class="panel">
+        <h3>Temporal spacing</h3>
+        <p class="note">How close sampled frames were to one another within the same video.</p>
+        <div class="stat-pair">
+          <div><b class="num">29.36%</b><span>consecutive frames</span></div>
+          <div><b class="num">79.7%</b><span>within a 10-frame gap</span></div>
+        </div>
+        <div class="stack" role="img" aria-label="29.36% consecutive, 50.34% within 2 to 10 frames, 20.3% further apart">
+          <div style="width:29.36%;background:var(--rip)"></div>
+          <div style="width:50.34%;background:color-mix(in srgb,var(--rip) 45%,var(--surface-2))"></div>
+          <div style="width:20.3%;background:var(--surface-2)"></div>
+        </div>
+        <div class="stack-key">
+          <span><i style="background:var(--rip)"></i>Consecutive, 29.36%</span>
+          <span><i style="background:color-mix(in srgb,var(--rip) 45%,var(--surface-2))"></i>2 to 10 frames apart, 50.34%</span>
+          <span><i style="background:var(--surface-2);border:1px solid var(--line)"></i>Further apart, 20.3%</span>
+        </div>
+        <p class="caption">Most frames sat very close to another sampled frame, so adding images added far less visual variety than the image count suggests.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Top contributing videos</h3>
+      <p class="note">Frames contributed by each of the largest source videos, with the median shown for reference.</p>
+      <div class="chart" id="fpv"></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="pipeline">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Training pipelines</h2>
+      <p>Both pipelines share the same preprocessing and model. The augmented pipeline adds randomized training transforms and three regularization controls.</p>
+    </div>
+    <div class="pipes">
+      <div class="pipe">
+        <h3>Standard pipeline</h3>
+        <div class="sub">Used by Baseline and V2 Dataset.</div>
+        <ol class="vflow" aria-label="Standard training pipeline">
+          <li>Input image</li>
+          <li>RGB conversion</li>
+          <li>Resize to 224 × 224 with padding</li>
+          <li>ImageNet normalization</li>
+          <li class="model">MobileNetV3-Large</li>
+          <li>Binary classifier head</li>
+          <li>Rip or non-rip prediction</li>
+        </ol>
+        <h4>Training configuration</h4>
+        <dl class="spec">
+          <dt>Architecture</dt><dd>MobileNetV3-Large</dd>
+          <dt>Initialization</dt><dd>ImageNet pretrained</dd>
+          <dt>Optimizer</dt><dd>Adam</dd>
+          <dt>Loss</dt><dd>BCEWithLogitsLoss</dd>
+          <dt>Learning rate</dt><dd class="num">0.0001</dd>
+          <dt>Evaluation</dt><dd>Accuracy, Precision, Recall, F1, F2</dd>
+        </dl>
+      </div>
+      <div class="pipe">
+        <h3>Augmented pipeline</h3>
+        <div class="sub">Used by Augmentation V1 and Augmentation V2.</div>
+        <ol class="vflow" aria-label="Augmented training pipeline">
+          <li>Input image</li>
+          <li class="hl">Training augmentation
+            <ul><li>Random horizontal flip</li><li>Random rotation</li><li>Color jitter</li></ul>
+          </li>
+          <li>Resize with padding, ImageNet normalization</li>
+          <li class="model">MobileNetV3-Large with dropout 0.3</li>
+          <li>Rip or non-rip prediction</li>
+        </ol>
+        <h4>Additional optimization</h4>
+        <div class="opt-cards">
+          <div class="opt"><b>Dropout regularization</b>
+            <dl class="spec"><dt>Dropout</dt><dd class="num">0.3</dd></dl>
+            <p>Reduces overfitting by preventing the model from depending on specific features.</p></div>
+          <div class="opt"><b>Early stopping</b>
+            <dl class="spec"><dt>Monitor</dt><dd>Validation F2</dd><dt>Patience</dt><dd>7 epochs</dd><dt>Max epochs</dt><dd>50</dd></dl></div>
+          <div class="opt"><b>Learning rate scheduling</b>
+            <dl class="spec"><dt>Scheduler</dt><dd>ReduceLROnPlateau</dd><dt>Factor</dt><dd class="num">0.5</dd><dt>Patience</dt><dd>3 epochs</dd></dl></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="experiments">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Four experiments, one change at a time</h2>
+      <p>The experiments form a two-by-two design: which dataset pipeline was used, and whether stronger regularization was added. Every step between neighbouring cells changes exactly one thing.</p>
+    </div>
+    <div class="matrix" role="table" aria-label="Experiment design">
+      <div class="corner"></div>
+      <div class="axis" role="columnheader">Standard fine-tuning</div>
+      <div class="axis" role="columnheader">Augmentation and dropout</div>
+      <div class="axis row" role="rowheader">Original datasets</div>
+      <div class="cell" data-label="Original datasets, standard fine-tuning" id="cell-baseline"></div>
+      <div class="cell" data-label="Original datasets, augmentation and dropout" id="cell-aug_v1"></div>
+      <div class="axis row" role="rowheader">V2 datasets</div>
+      <div class="cell" data-label="V2 datasets, standard fine-tuning" id="cell-v2"></div>
+      <div class="cell" data-label="V2 datasets, augmentation and dropout" id="cell-aug_v2"></div>
+    </div>
+    <div class="panel" style="margin-top:22px">
+      <div class="table-wrap">
+        <table class="exp-table" aria-label="Experiment configurations">
+          <thead><tr><th>Experiment</th><th style="text-align:left">Dataset</th><th style="text-align:left">Training strategy</th><th>Sizes</th></tr></thead>
+          <tbody id="exp-table"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="comparisons" id="cmp-list"></div>
+  </div>
+</section>
+
+<section class="block" id="results">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Results across dataset sizes</h2>
+      <p>Each point is one trained model evaluated on its own held-out test set. The dashed line shows what a model scores by labelling every image as a rip current, the floor any useful model must clear.</p>
+    </div>
+
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <div class="panel">
+      <div class="controls">
+        <label>Metric
+          <select id="metric-select"></select>
+        </label>
+        <div>
+          <div class="meta" style="margin-bottom:4px;font-weight:600">Experiments shown</div>
+          <div class="legend" id="legend"></div>
+        </div>
+      </div>
+      <h3 id="curve-title">Learning curve</h3>
+      <p class="note">Dataset size is on a log scale, so each doubling is the same distance apart.</p>
+      <div class="chart" id="curve"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Gain from each step up in size</h3>
+        <p class="note">Change in the selected metric, in percentage points, between consecutive dataset sizes. Shrinking bars indicate diminishing returns.</p>
+        <label class="meta" style="display:grid;gap:4px;font-weight:600;margin-bottom:10px;max-width:260px">Experiment
+          <select id="gain-exp"></select>
+        </label>
+        <div class="chart" id="gains"></div>
+      </div>
+      <div class="panel">
+        <h3>Single condition</h3>
+        <p class="note">All five metrics for one experiment at one dataset size.</p>
+        <div class="controls" style="margin-bottom:0">
+          <label>Experiment <select id="sel-exp"></select></label>
+          <label>Dataset size <select id="sel-size"></select></label>
+        </div>
+        <div id="sel-out"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Full results table</h3>
+      <p class="note">Bold marks the best value of each metric within an experiment.</p>
+      <div class="table-wrap" id="full-table"></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="compute">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Computational evaluation</h2>
+      <p>The model itself is the same size in every experiment. Training time, inference time, and throughput come from the loaded results.</p>
+    </div>
+    <div class="facts" style="margin-top:0;margin-bottom:10px">
+      <div class="fact"><b class="num">48.5 MB</b><span>saved checkpoint</span></div>
+      <div class="fact"><b class="num">~8.2 ms</b><span>per frame, one image at a time</span></div>
+      <div class="fact"><b class="num">~120 FPS</b><span>single-image throughput</span></div>
+      <div class="fact"><b class="num">80 MB</b><span>peak GPU memory during inference</span></div>
+    </div>
+    <p class="meta" style="margin:0 0 24px">Baseline benchmark on an NVIDIA GeForce RTX 3050, batch size 1 after 30 warm-up images. Batched evaluation averaged about 1.7 ms per image.</p>
+    <div class="panel">
+      <div class="controls">
+        <label>Measure <select id="comp-select"></select></label>
+      </div>
+      <h3 id="comp-title">Training time</h3>
+      <p class="note">Dataset size on a log scale. Measured on the study workstation (Ryzen 5 5600X, RTX 3050 8 GB).</p>
+      <div class="chart" id="comp-chart"></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="effects">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>What each change did</h2>
+      <p>Difference in <span id="effects-metric">F2-score</span>, in percentage points, at the dataset sizes shared by both experiments in each pair. Positive means the second experiment scored higher.</p>
+    </div>
+    <div class="panel"><div class="table-wrap" id="effects-table"></div></div>
+  </div>
+</section>
+
+<section class="block" id="reading">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Reading these results carefully</h2>
+    </div>
+    <div class="notes">
+      <article>
+        <h3>The pipelines weight test videos differently</h3>
+        <p>Both pipelines test on frames from the same source videos, but not the same frames. The original test sets are dominated by whichever clips came first, while V2 spreads the test images evenly across clips. A score in each pipeline therefore rewards different videos, so scaling trends are most reliable within a pipeline.</p>
+      </article>
+      <article>
+        <h3>Class imbalance sets a high floor</h3>
+        <p>With roughly 77% rip-current images, a model that always answers "rip current" reaches about 77% accuracy and an F2-score near 94%. Recall and F2 should be read against that reference, and precision shows whether the model actually learned to recognise calm water.</p>
+      </article>
+      <article>
+        <h3>A few videos drive the errors</h3>
+        <p>Each test set draws on only four non-rip videos and about twenty rip videos. In the baseline at 20,000 images, all 54 false alarms came from one non-rip video (NR-002) and 115 of the 137 missed rip currents came from one rip video (142). Shifts between sizes often reflect how those clips are handled rather than general learning.</p>
+      </article>
+      <article>
+        <h3>One run per condition</h3>
+        <p>Each point comes from a single training run. Small differences between neighbouring sizes may fall within run-to-run variation, so the overall shape of the curve says more than any single step.</p>
+      </article>
+      <article>
+        <h3>Scope</h3>
+        <p>Findings apply to MobileNetV3-Large on RipVIS-derived frames at the tested sizes. They do not identify a universally sufficient dataset size, and further validation is needed before applying them to other beaches or to live monitoring.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="data">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Load results</h2>
+      <p>Paste or open a CSV or JSON file of results. Loaded results are kept in this browser only; to publish them for everyone, send them to be embedded in the page.</p>
+    </div>
+    <details class="loader" id="loader">
+      <summary>Add or replace results</summary>
+      <div class="loader-body">
+        <p class="meta" style="margin:0">One row per experiment and dataset size. Experiment can be <code>baseline</code>, <code>aug_v1</code>, <code>v2</code>, or <code>aug_v2</code> (full names also work). Metrics may be decimals (0.9312) or percentages (93.12). <code>tp</code>, <code>tn</code>, <code>fp</code>, <code>fn</code>, <code>training_time_min</code>, <code>inference_ms</code> (per image), <code>fps</code>, <code>run_id</code>, and <code>created_at</code> are optional. In JSON, an <code>audit.frames_per_video</code> list of <code>{"video": "...", "frames": 2126}</code> entries fills the top-videos chart.</p>
+        <pre id="template">experiment,dataset_size,accuracy,precision,recall,f1_score,f2_score,tp,tn,fp,fn,training_time_min,inference_ms,fps
+baseline,2500,,,,,,,,,,,,
+aug_v1,2500,,,,,,,,,,,,
+v2,500,,,,,,,,,,,,
+aug_v2,500,,,,,,,,,,,,</pre>
+        <div class="row-btns">
+          <label class="btn" for="file-in">Open CSV or JSON file</label>
+          <input type="file" id="file-in" accept=".csv,.json,text/csv,application/json" class="sr-only">
+        </div>
+        <label for="paste-in" class="meta" style="font-weight:600">Or paste here</label>
+        <textarea id="paste-in" spellcheck="false" placeholder="experiment,dataset_size,accuracy,precision,recall,f1_score,f2_score"></textarea>
+        <div class="row-btns">
+          <button class="primary" id="btn-load">Load results</button>
+          <button id="btn-sample">Preview with sample values</button>
+          <button id="btn-copy">Copy current results as JSON</button>
+          <button id="btn-reset">Clear loaded results</button>
+        </div>
+        <ul class="errors" id="load-errors"></ul>
+      </div>
+    </details>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="safety">These are experimental research findings from a thesis study. They are not beach warnings, hazard ratings, or swimmer-safety advice.</div>
+    <p>Data: RipVIS: Rip Currents Video Instance Segmentation Benchmark for Beach Monitoring and Safety (Dumitriu et al., CVPR 2025). Model: MobileNetV3-Large (Howard et al., ICCV 2019), implemented in PyTorch and TorchVision.</p>
+    <p>University of San Carlos, Department of Computer, Information Sciences and Mathematics.</p>
+  </div>
+</footer>
+
+<!-- Embedded study results. Leave empty until final values are confirmed. -->
+<script type="application/json" id="results-data">
+{
+ "positive_ratio": 0.77,
+ "results": [
+  {
+   "experiment": "baseline",
+   "dataset_size": 500,
+   "accuracy": 0.933333,
+   "precision": 0.964912,
+   "recall": 0.948276,
+   "f1_score": 0.956522,
+   "f2_score": 0.951557,
+   "best_epoch": 16,
+   "training_time_min": 0.549,
+   "inference_ms": 8.17,
+   "fps": 122.4,
+   "inference_batched_ms": 1.756,
+   "run_id": "baseline_dataset_500",
+   "tp": 55,
+   "tn": 15,
+   "fp": 2,
+   "fn": 3
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 1000,
+   "accuracy": 0.9,
+   "precision": 0.938596,
+   "recall": 0.930435,
+   "f1_score": 0.934498,
+   "f2_score": 0.932056,
+   "best_epoch": 9,
+   "training_time_min": 0.964,
+   "inference_ms": 8.913,
+   "fps": 112.2,
+   "inference_batched_ms": 1.523,
+   "run_id": "baseline_dataset_1000",
+   "tp": 107,
+   "tn": 28,
+   "fp": 7,
+   "fn": 8
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 1500,
+   "accuracy": 0.915556,
+   "precision": 0.958333,
+   "recall": 0.930636,
+   "f1_score": 0.944282,
+   "f2_score": 0.936047,
+   "best_epoch": 8,
+   "training_time_min": 1.443,
+   "inference_ms": 8.341,
+   "fps": 119.9,
+   "inference_batched_ms": 1.818,
+   "run_id": "baseline_dataset_1500",
+   "tp": 161,
+   "tn": 45,
+   "fp": 7,
+   "fn": 12
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 2000,
+   "accuracy": 0.926667,
+   "precision": 0.952381,
+   "recall": 0.952381,
+   "f1_score": 0.952381,
+   "f2_score": 0.952381,
+   "best_epoch": 9,
+   "training_time_min": 1.896,
+   "inference_ms": 8.011,
+   "fps": 124.8,
+   "inference_batched_ms": 1.733,
+   "run_id": "baseline_dataset_2000",
+   "tp": 220,
+   "tn": 58,
+   "fp": 11,
+   "fn": 11
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 2500,
+   "accuracy": 0.957333,
+   "precision": 0.950495,
+   "recall": 0.99654,
+   "f1_score": 0.972973,
+   "f2_score": 0.986977,
+   "best_epoch": 13,
+   "training_time_min": 2.352,
+   "inference_ms": 8.43,
+   "fps": 118.6,
+   "inference_batched_ms": 1.829,
+   "run_id": "baseline_dataset_2500",
+   "tp": 288,
+   "tn": 71,
+   "fp": 15,
+   "fn": 1
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 5000,
+   "accuracy": 0.934667,
+   "precision": 0.947458,
+   "recall": 0.968804,
+   "f1_score": 0.958012,
+   "f2_score": 0.964458,
+   "best_epoch": 13,
+   "training_time_min": 4.702,
+   "inference_ms": 7.885,
+   "fps": 126.8,
+   "inference_batched_ms": 1.736,
+   "run_id": "baseline_dataset_5000",
+   "tp": 559,
+   "tn": 142,
+   "fp": 31,
+   "fn": 18
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 10000,
+   "accuracy": 0.927333,
+   "precision": 0.959578,
+   "recall": 0.945455,
+   "f1_score": 0.952464,
+   "f2_score": 0.948246,
+   "best_epoch": 3,
+   "training_time_min": 9.294,
+   "inference_ms": 8.215,
+   "fps": 121.7,
+   "inference_batched_ms": 1.757,
+   "run_id": "baseline_dataset_10000",
+   "tp": 1092,
+   "tn": 299,
+   "fp": 46,
+   "fn": 63
+  },
+  {
+   "experiment": "baseline",
+   "dataset_size": 20000,
+   "accuracy": 0.936333,
+   "precision": 0.975752,
+   "recall": 0.940693,
+   "f1_score": 0.957902,
+   "f2_score": 0.947502,
+   "best_epoch": 15,
+   "training_time_min": 18.457,
+   "inference_ms": 8.306,
+   "fps": 120.4,
+   "inference_batched_ms": 1.685,
+   "run_id": "baseline_dataset_20000",
+   "tp": 2173,
+   "tn": 636,
+   "fp": 54,
+   "fn": 137
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 500,
+   "accuracy": 0.773333,
+   "precision": 0.788732,
+   "recall": 0.965517,
+   "f1_score": 0.868217,
+   "f2_score": 0.924092,
+   "best_epoch": 4,
+   "actual_epochs": 11,
+   "training_time_min": 0.417,
+   "inference_ms": 7.933,
+   "fps": 126.1,
+   "inference_batched_ms": 1.973,
+   "run_id": "aug_v1_dataset_500",
+   "tp": 56,
+   "tn": 2,
+   "fp": 15,
+   "fn": 2
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 1000,
+   "accuracy": 0.9,
+   "precision": 0.938596,
+   "recall": 0.930435,
+   "f1_score": 0.934498,
+   "f2_score": 0.932056,
+   "best_epoch": 13,
+   "actual_epochs": 20,
+   "training_time_min": 1.326,
+   "inference_ms": 8.629,
+   "fps": 115.9,
+   "inference_batched_ms": 2.1,
+   "run_id": "aug_v1_dataset_1000",
+   "tp": 107,
+   "tn": 28,
+   "fp": 7,
+   "fn": 8
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 1500,
+   "accuracy": 0.906667,
+   "precision": 0.936782,
+   "recall": 0.942197,
+   "f1_score": 0.939481,
+   "f2_score": 0.941109,
+   "best_epoch": 7,
+   "actual_epochs": 14,
+   "training_time_min": 1.356,
+   "inference_ms": 8.444,
+   "fps": 118.4,
+   "inference_batched_ms": 2.027,
+   "run_id": "aug_v1_dataset_1500",
+   "tp": 163,
+   "tn": 41,
+   "fp": 11,
+   "fn": 10
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 2000,
+   "accuracy": 0.946667,
+   "precision": 0.982063,
+   "recall": 0.948052,
+   "f1_score": 0.964758,
+   "f2_score": 0.954664,
+   "best_epoch": 8,
+   "actual_epochs": 15,
+   "training_time_min": 1.922,
+   "inference_ms": 8.254,
+   "fps": 121.1,
+   "inference_batched_ms": 2.003,
+   "run_id": "aug_v1_dataset_2000",
+   "tp": 219,
+   "tn": 65,
+   "fp": 4,
+   "fn": 12
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 2500,
+   "accuracy": 0.917333,
+   "precision": 0.938776,
+   "recall": 0.955017,
+   "f1_score": 0.946827,
+   "f2_score": 0.951724,
+   "best_epoch": 7,
+   "actual_epochs": 14,
+   "training_time_min": 2.234,
+   "inference_ms": 8.034,
+   "fps": 124.5,
+   "inference_batched_ms": 1.992,
+   "run_id": "aug_v1_dataset_2500",
+   "tp": 276,
+   "tn": 68,
+   "fp": 18,
+   "fn": 13
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 5000,
+   "accuracy": 0.937333,
+   "precision": 0.97491,
+   "recall": 0.942808,
+   "f1_score": 0.95859,
+   "f2_score": 0.949058,
+   "best_epoch": 13,
+   "actual_epochs": 20,
+   "training_time_min": 6.632,
+   "inference_ms": 7.948,
+   "fps": 125.8,
+   "inference_batched_ms": 2.117,
+   "run_id": "aug_v1_dataset_5000",
+   "tp": 544,
+   "tn": 159,
+   "fp": 14,
+   "fn": 33
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 10000,
+   "accuracy": 0.936,
+   "precision": 0.956072,
+   "recall": 0.961039,
+   "f1_score": 0.958549,
+   "f2_score": 0.960042,
+   "best_epoch": 6,
+   "actual_epochs": 13,
+   "training_time_min": 8.472,
+   "inference_ms": 8.033,
+   "fps": 124.5,
+   "inference_batched_ms": 2.292,
+   "run_id": "aug_v1_dataset_10000",
+   "tp": 1110,
+   "tn": 294,
+   "fp": 51,
+   "fn": 45
+  },
+  {
+   "experiment": "aug_v1",
+   "dataset_size": 20000,
+   "accuracy": 0.83,
+   "precision": 1.0,
+   "recall": 0.779221,
+   "f1_score": 0.875912,
+   "f2_score": 0.815217,
+   "best_epoch": 8,
+   "actual_epochs": 15,
+   "training_time_min": 19.693,
+   "inference_ms": 8.055,
+   "fps": 124.2,
+   "inference_batched_ms": 2.284,
+   "run_id": "aug_v1_dataset_20000",
+   "tp": 1800,
+   "tn": 690,
+   "fp": 0,
+   "fn": 510
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 500,
+   "accuracy": 0.773333,
+   "precision": 0.773333,
+   "recall": 1.0,
+   "f1_score": 0.87218,
+   "f2_score": 0.944625,
+   "best_epoch": 1,
+   "training_time_min": 0.518,
+   "inference_ms": 8.401,
+   "fps": 119.0,
+   "inference_batched_ms": 1.975,
+   "run_id": "v2_dataset_500",
+   "tp": 58,
+   "tn": 0,
+   "fp": 17,
+   "fn": 0
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 1000,
+   "accuracy": 0.766667,
+   "precision": 0.766667,
+   "recall": 1.0,
+   "f1_score": 0.867925,
+   "f2_score": 0.942623,
+   "best_epoch": 1,
+   "training_time_min": 1.023,
+   "inference_ms": 8.945,
+   "fps": 111.8,
+   "inference_batched_ms": 2.025,
+   "run_id": "v2_dataset_1000",
+   "tp": 115,
+   "tn": 0,
+   "fp": 35,
+   "fn": 0
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 1500,
+   "accuracy": 0.991111,
+   "precision": 0.988571,
+   "recall": 1.0,
+   "f1_score": 0.994253,
+   "f2_score": 0.997693,
+   "best_epoch": 17,
+   "training_time_min": 1.556,
+   "inference_ms": 9.204,
+   "fps": 108.7,
+   "inference_batched_ms": 2.207,
+   "run_id": "v2_dataset_1500",
+   "tp": 173,
+   "tn": 50,
+   "fp": 2,
+   "fn": 0
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 2000,
+   "accuracy": 0.836667,
+   "precision": 0.825,
+   "recall": 1.0,
+   "f1_score": 0.90411,
+   "f2_score": 0.959302,
+   "best_epoch": 17,
+   "training_time_min": 1.943,
+   "inference_ms": 8.822,
+   "fps": 113.4,
+   "inference_batched_ms": 1.966,
+   "run_id": "v2_dataset_2000",
+   "tp": 231,
+   "tn": 20,
+   "fp": 49,
+   "fn": 0
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 2500,
+   "accuracy": 0.954667,
+   "precision": 0.944444,
+   "recall": 1.0,
+   "f1_score": 0.971429,
+   "f2_score": 0.988372,
+   "best_epoch": 13,
+   "training_time_min": 2.567,
+   "inference_ms": 8.61,
+   "fps": 116.1,
+   "inference_batched_ms": 1.958,
+   "run_id": "v2_dataset_2500",
+   "tp": 289,
+   "tn": 69,
+   "fp": 17,
+   "fn": 0
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 5000,
+   "accuracy": 0.988,
+   "precision": 0.994774,
+   "recall": 0.989601,
+   "f1_score": 0.992181,
+   "f2_score": 0.990632,
+   "best_epoch": 8,
+   "training_time_min": 5.018,
+   "inference_ms": 8.63,
+   "fps": 115.9,
+   "inference_batched_ms": 2.131,
+   "run_id": "v2_dataset_5000",
+   "tp": 571,
+   "tn": 170,
+   "fp": 3,
+   "fn": 6
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 10000,
+   "accuracy": 0.971333,
+   "precision": 0.9903,
+   "recall": 0.972294,
+   "f1_score": 0.981215,
+   "f2_score": 0.975843,
+   "best_epoch": 20,
+   "training_time_min": 9.801,
+   "inference_ms": 8.564,
+   "fps": 116.8,
+   "inference_batched_ms": 2.089,
+   "run_id": "v2_dataset_10000",
+   "tp": 1123,
+   "tn": 334,
+   "fp": 11,
+   "fn": 32
+  },
+  {
+   "experiment": "v2",
+   "dataset_size": 20000,
+   "accuracy": 0.897,
+   "precision": 0.929215,
+   "recall": 0.937662,
+   "f1_score": 0.93342,
+   "f2_score": 0.935961,
+   "best_epoch": 2,
+   "training_time_min": 19.549,
+   "inference_ms": 8.51,
+   "fps": 117.5,
+   "inference_batched_ms": 2.141,
+   "run_id": "v2_dataset_20000",
+   "tp": 2166,
+   "tn": 525,
+   "fp": 165,
+   "fn": 144
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 500,
+   "accuracy": 0.773333,
+   "precision": 0.773333,
+   "recall": 1.0,
+   "f1_score": 0.87218,
+   "f2_score": 0.944625,
+   "best_epoch": 1,
+   "actual_epochs": 8,
+   "best_val_f2": 0.944625,
+   "training_time_min": 0.308,
+   "inference_ms": 9.084,
+   "fps": 110.1,
+   "inference_batched_ms": 1.787,
+   "run_id": "aug_v2_dataset_500",
+   "tp": 58,
+   "tn": 0,
+   "fp": 17,
+   "fn": 0
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 1000,
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1_score": 1.0,
+   "f2_score": 1.0,
+   "best_epoch": 8,
+   "actual_epochs": 15,
+   "best_val_f2": 0.949477,
+   "training_time_min": 1.012,
+   "inference_ms": 9.266,
+   "fps": 107.9,
+   "inference_batched_ms": 1.667,
+   "run_id": "aug_v2_dataset_1000",
+   "tp": 115,
+   "tn": 35,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 1500,
+   "accuracy": 0.977778,
+   "precision": 0.97191,
+   "recall": 1.0,
+   "f1_score": 0.985755,
+   "f2_score": 0.994253,
+   "best_epoch": 17,
+   "actual_epochs": 24,
+   "best_val_f2": 0.943287,
+   "training_time_min": 2.432,
+   "inference_ms": 9.463,
+   "fps": 105.7,
+   "inference_batched_ms": 1.808,
+   "run_id": "aug_v2_dataset_1500",
+   "tp": 173,
+   "tn": 47,
+   "fp": 5,
+   "fn": 0
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 2000,
+   "accuracy": 0.996667,
+   "precision": 1.0,
+   "recall": 0.995671,
+   "f1_score": 0.997831,
+   "f2_score": 0.996534,
+   "best_epoch": 13,
+   "actual_epochs": 20,
+   "best_val_f2": 0.943723,
+   "training_time_min": 2.628,
+   "inference_ms": 9.16,
+   "fps": 109.2,
+   "inference_batched_ms": 1.776,
+   "run_id": "aug_v2_dataset_2000",
+   "tp": 230,
+   "tn": 69,
+   "fp": 0,
+   "fn": 1
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 2500,
+   "accuracy": 0.965333,
+   "precision": 0.972603,
+   "recall": 0.982699,
+   "f1_score": 0.977625,
+   "f2_score": 0.980663,
+   "best_epoch": 10,
+   "actual_epochs": 17,
+   "best_val_f2": 0.95537,
+   "training_time_min": 2.732,
+   "inference_ms": 8.797,
+   "fps": 113.7,
+   "inference_batched_ms": 1.661,
+   "run_id": "aug_v2_dataset_2500",
+   "tp": 284,
+   "tn": 78,
+   "fp": 8,
+   "fn": 5
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 5000,
+   "accuracy": 0.998667,
+   "precision": 0.99827,
+   "recall": 1.0,
+   "f1_score": 0.999134,
+   "f2_score": 0.999653,
+   "best_epoch": 5,
+   "actual_epochs": 12,
+   "best_val_f2": 0.965673,
+   "training_time_min": 3.769,
+   "inference_ms": 8.832,
+   "fps": 113.2,
+   "inference_batched_ms": 1.721,
+   "run_id": "aug_v2_dataset_5000",
+   "tp": 577,
+   "tn": 172,
+   "fp": 1,
+   "fn": 0
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 10000,
+   "accuracy": 0.961333,
+   "precision": 0.975716,
+   "recall": 0.974026,
+   "f1_score": 0.97487,
+   "f2_score": 0.974363,
+   "best_epoch": 6,
+   "actual_epochs": 13,
+   "best_val_f2": 0.990279,
+   "training_time_min": 8.107,
+   "inference_ms": 8.763,
+   "fps": 114.1,
+   "inference_batched_ms": 1.641,
+   "run_id": "aug_v2_dataset_10000",
+   "tp": 1125,
+   "tn": 317,
+   "fp": 28,
+   "fn": 30
+  },
+  {
+   "experiment": "aug_v2",
+   "dataset_size": 20000,
+   "accuracy": 0.929667,
+   "precision": 0.923356,
+   "recall": 0.990909,
+   "f1_score": 0.955941,
+   "f2_score": 0.976619,
+   "best_epoch": 4,
+   "actual_epochs": 11,
+   "best_val_f2": 0.99377,
+   "training_time_min": 14.185,
+   "inference_ms": 9.23,
+   "fps": 108.3,
+   "inference_batched_ms": 1.785,
+   "run_id": "aug_v2_dataset_20000",
+   "tp": 2289,
+   "tn": 500,
+   "fp": 190,
+   "fn": 21
+  }
+ ]
+}
+</script>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- Constants ---------- */
+const EXP = [
+  {id:"baseline", name:"Baseline", pipeline:"original", training:"standard", marker:"circle",
+   desc:"ImageNet-pretrained MobileNetV3-Large fine-tuned on the original datasets with BCEWithLogitsLoss and Adam.",
+   items:["Original datasets","No added augmentation","Fixed training schedule"],
+   rq:"How well does the model perform with the original pipeline?"},
+  {id:"aug_v1", name:"Augmentation V1", pipeline:"original", training:"augmented", marker:"square",
+   desc:"Same data as the baseline, stronger regularization.",
+   items:["Horizontal flip, rotation, color jitter","Dropout 0.3","Up to 50 epochs, early stopping on validation F2","ReduceLROnPlateau scheduler"],
+   rq:"Can better training reduce overfitting on the same data?"},
+  {id:"v2", name:"V2 Dataset", pipeline:"v2", training:"standard", marker:"triangle",
+   desc:"Rebuilt datasets, training kept close to the baseline.",
+   items:["Equal frames from every video","Same videos at every size","Eight nested sizes, audited"],
+   rq:"Does removing dataset bias change measured performance?"},
+  {id:"aug_v2", name:"Augmentation V2", pipeline:"v2", training:"augmented", marker:"diamond",
+   desc:"Rebuilt datasets combined with the stronger training setup.",
+   items:["Everything in V2 Dataset","Plus the Augmentation V1 training setup"],
+   rq:"Does better data plus stronger regularization generalize best?"}
+];
+const EXP_BY_ID = Object.fromEntries(EXP.map(e=>[e.id,e]));
+const COMPARISONS = [
+  {from:"baseline", to:"aug_v1", measures:"Effect of the training changes alone."},
+  {from:"baseline", to:"v2", measures:"Effect of the rebuilt datasets alone."},
+  {from:"v2", to:"aug_v2", measures:"Effect of stronger training on the rebuilt data."},
+  {from:"baseline", to:"aug_v2", measures:"Overall change from the complete revised pipeline."}
+];
+const METRICS = [
+  {key:"accuracy", label:"Accuracy"},
+  {key:"precision", label:"Precision"},
+  {key:"recall", label:"Recall"},
+  {key:"f1_score", label:"F1-score"},
+  {key:"f2_score", label:"F2-score"}
+];
+const METRICS_ALL = METRICS.concat([{key:"specificity", label:"Specificity"}]);
+const COMP = [
+  {key:"training_time_min", label:"Training time", axis:"Minutes", tick:v=>fmtN(v)+" min", tip:v=>v.toFixed(1)+" min"},
+  {key:"inference_ms", label:"Inference time per frame", axis:"Milliseconds per frame", tick:v=>fmtN(v)+" ms", tip:v=>v.toFixed(2)+" ms/frame"},
+  {key:"fps", label:"Throughput", axis:"Frames per second", tick:v=>fmtN(v), tip:v=>Math.round(v)+" FPS"}
+];
+function fmtN(v){ return Math.abs(v)>=100 ? Math.round(v).toString() : (+v.toFixed(2)).toString(); }
+const SIZES_ORIGINAL = [500,1000,1500,2000,2500,5000,10000,20000];
+const SIZES_V2 = [500,1000,1500,2000,2500,5000,10000,20000];
+const TABLE2 = [
+  [20000,"Training",10782,3218,14000],[20000,"Validation",2311,689,3000],[20000,"Testing",2310,690,3000],
+  [10000,"Training",5392,1608,7000],[10000,"Validation",1155,345,1500],[10000,"Testing",1155,345,1500],
+  [5000,"Training",2696,804,3500],[5000,"Validation",578,172,750],[5000,"Testing",577,173,750],
+  [2500,"Training",1347,403,1750],[2500,"Validation",289,86,375],[2500,"Testing",289,86,375]
+];
+const STORE_KEY = "ripcurrent-thesis-results-v1";
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id);
+const nf = new Intl.NumberFormat("en-US");
+const sizeLabel = n => n>=1000 ? (n%1000===0 ? (n/1000)+"k" : (n/1000).toFixed(1).replace(/\.0$/,"")+"k") : String(n);
+const pct = v => (v==null||isNaN(v)) ? "—" : (v*100).toFixed(2)+"%";
+const pts = v => (v==null||isNaN(v)) ? "—" : (v>0?"+":v<0?"−":"±")+Math.abs(v*100).toFixed(2);
+const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function el(tag, attrs, parent){
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function markerPath(shape, x, y, r){
+  switch(shape){
+    case "square": return `M${x-r*.85},${y-r*.85}h${r*1.7}v${r*1.7}h${-r*1.7}z`;
+    case "triangle": return `M${x},${y-r*1.1}L${x+r},${y+r*.75}L${x-r},${y+r*.75}z`;
+    case "diamond": return `M${x},${y-r*1.15}L${x+r*1.05},${y}L${x},${y+r*1.15}L${x-r*1.05},${y}z`;
+    default: return `M${x-r},${y}a${r},${r} 0 1,0 ${r*2},0a${r},${r} 0 1,0 ${-r*2},0`;
+  }
+}
+function markerIcon(exp, size){
+  const s = size||14;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 14 14" aria-hidden="true"><path d="${markerPath(exp.marker,7,7,5)}" style="fill:var(--c-${exp.id})"/></svg>`;
+}
+
+/* ---------- Hero scene ---------- */
+(function drawScene(){
+  const svg = $("scene");
+  const defs = el("defs",{},svg);
+  const g = el("linearGradient",{id:"sea",x1:"0",y1:"0",x2:"0",y2:"1"},defs);
+  [["0","#0B2F3D"],["0.55","#14505D"],["0.78","#2E8481"],["0.86","#5FA8A0"],["0.9","#CFC3A3"],["1","#DCCFAE"]].forEach(([o,c])=>el("stop",{offset:o,"stop-color":c},g));
+  const pg = el("radialGradient",{id:"plumeG",cx:"0.5",cy:"0.35",r:"0.6"},defs);
+  el("stop",{offset:"0","stop-color":"#6E5230","stop-opacity":"0.85"},pg);
+  el("stop",{offset:"1","stop-color":"#6E5230","stop-opacity":"0"},pg);
+  el("rect",{x:0,y:0,width:1200,height:640,fill:"url(#sea)"},svg);
+
+  // Rip channel: murky plume flowing seaward through a gap in the breakers
+  const plume = el("g",{id:"plume"},svg);
+  el("path",{d:"M820,575 C812,520 800,480 790,440 C770,400 735,380 745,345 C758,305 820,300 860,318 C900,336 912,372 890,405 C872,435 865,480 858,575 Z",fill:"url(#plumeG)"},plume);
+  el("path",{d:"M826,575 C822,530 815,490 808,455 C800,430 790,410 800,392",fill:"none",stroke:"#8A6A3C","stroke-opacity":".5","stroke-width":"2"},plume);
+
+  // Breaking wave lines with a gap at the rip channel
+  const gapL = 772, gapR = 880;
+  const lines = [
+    {y:430,a:5,w:2.6,o:.95},{y:462,a:4,w:2.2,o:.85},{y:490,a:3.5,w:2,o:.8},
+    {y:515,a:3,w:1.6,o:.7},{y:537,a:2.5,w:1.4,o:.6},{y:398,a:6,w:1.4,o:.35},{y:370,a:6,w:1,o:.2}
+  ];
+  lines.forEach((ln,i)=>{
+    const segs = [[-20,gapL - i*4],[gapR + i*5,1220]];
+    segs.forEach(([x0,x1])=>{
+      let d = "";
+      for (let x=x0; x<=x1; x+=12){
+        const y = ln.y + Math.sin(x/48 + i*1.7)*ln.a + Math.sin(x/170 + i)*ln.a*1.4;
+        d += (x===x0?"M":"L") + x.toFixed(1)+","+y.toFixed(1);
+      }
+      el("path",{d,fill:"none",stroke:"#F4FBFA","stroke-opacity":ln.o,"stroke-width":ln.w,"stroke-linecap":"round"},svg);
+    });
+  });
+  // shoreline wash
+  let shore = "M-20,560";
+  for (let x=-20;x<=1220;x+=20){ shore += " L"+x+","+(560+Math.sin(x/90)*5+Math.sin(x/33)*2).toFixed(1); }
+  el("path",{d:shore,fill:"none",stroke:"#FFFFFF","stroke-opacity":".7","stroke-width":"3"},svg);
+  // label
+  const t = el("text",{x:"905",y:"360",fill:"#F1E3C8","font-size":"15","font-family":"Public Sans, sans-serif"},svg);
+  t.textContent = "rip channel: no breaking waves, darker water";
+  el("path",{d:"M900,356 L872,356",stroke:"#F1E3C8","stroke-width":"1.2"},svg);
+})();
+
+/* ---------- Static sections ---------- */
+(function drawStatic(){
+  function nest(target, sizes){
+    const max = Math.max(...sizes);
+    $(target).innerHTML = sizes.slice().reverse().map(s=>{
+      const w = Math.max(s/max*100, 0.8);
+      return `<div class="nest-row"><span class="lbl num">${nf.format(s)}</span><div class="bar" style="width:${w}%"><i style="width:100%"></i></div></div>`;
+    }).join("");
+  }
+  nest("nest-original", SIZES_ORIGINAL);
+  nest("nest-v2", SIZES_V2);
+
+  let last = null;
+  $("table2").innerHTML = TABLE2.map(r=>{
+    const first = r[0]!==last; last = r[0];
+    return `<tr class="${first?"group-start":""}"><td class="num">${first?nf.format(r[0]):""}</td><td style="text-align:left">${r[1]}</td><td class="num">${nf.format(r[2])}</td><td class="num">${nf.format(r[3])}</td><td class="num">${nf.format(r[4])}</td></tr>`;
+  }).join("");
+
+  EXP.forEach(e=>{
+    $("cell-"+e.id).innerHTML = `<div class="swatch">${markerIcon(e,16)}<span>${esc(e.name)}</span></div>
+      <p>${esc(e.desc)}</p><ul>${e.items.map(i=>`<li>${esc(i)}</li>`).join("")}</ul>
+      <div class="rq">${esc(e.rq)}</div>`;
+  });
+  $("cmp-list").innerHTML = COMPARISONS.map(c=>{
+    const a=EXP_BY_ID[c.from], b=EXP_BY_ID[c.to];
+    return `<div class="cmp"><div class="pair">${markerIcon(a)}${esc(a.name)}<span aria-hidden="true" style="color:var(--muted)">to</span>${markerIcon(b)}${esc(b.name)}</div><p>${esc(c.measures)}</p></div>`;
+  }).join("");
+})();
+
+/* ---------- Data parsing and validation ---------- */
+const ALIASES = {
+  "baseline":"baseline","original":"baseline","original baseline":"baseline",
+  "aug v1":"aug_v1","augv1":"aug_v1","augmentation v1":"aug_v1","augmentation":"aug_v1",
+  "v2":"v2","v2 dataset":"v2","v2 new dataset":"v2","new dataset":"v2",
+  "aug v2":"aug_v2","augv2":"aug_v2","augmentation v2":"aug_v2"
+};
+function expId(s){
+  let k = String(s??"").trim().toLowerCase().replace(/^mobilenetv3[- ]?large\s*/,"").replace(/[_-]+/g," ").replace(/\s+/g," ");
+  return ALIASES[k] || null;
+}
+const FIELD_ALIASES = {"training time":"training_time_min","training time min":"training_time_min","train time":"training_time_min","inference time":"inference_ms","inference time ms":"inference_ms","inference ms per image":"inference_ms","frames per second":"fps","f1":"f1_score","f1 score":"f1_score","f2":"f2_score","f2 score":"f2_score","size":"dataset_size","dataset":"dataset_size","images":"dataset_size","model":"experiment","exp":"experiment"};
+function normKey(k){
+  const s = String(k).trim().toLowerCase().replace(/[-_]+/g," ").replace(/\s+/g," ");
+  if (FIELD_ALIASES[s]) return FIELD_ALIASES[s];
+  return s.replace(/ /g,"_");
+}
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim()!=="");
+  if (!lines.length) return [];
+  const split = l => l.split(/,|\t/).map(c=>c.trim().replace(/^"|"$/g,""));
+  const head = split(lines[0]).map(normKey);
+  return lines.slice(1).map(l=>{
+    const cells = split(l), o = {};
+    head.forEach((h,i)=>{ o[h] = cells[i]; });
+    return o;
+  });
+}
+function parseInput(text){
+  const t = text.trim();
+  if (!t) throw new Error("Nothing to load. Paste CSV or JSON, or open a file.");
+  if (t[0]==="{" || t[0]==="["){
+    const j = JSON.parse(t);
+    const rows = Array.isArray(j) ? j : (j.results || []);
+    return {rows: rows.map(r=>{ const o={}; for (const k in r) o[normKey(k)] = r[k]; return o; }), ratio: j.positive_ratio, audit: Array.isArray(j) ? null : (j.audit||null)};
+  }
+  return {rows: parseCSV(t)};
+}
+function toNum(v){
+  if (v===undefined || v===null || String(v).trim()==="") return null;
+  const n = Number(String(v).replace(/[%\s,]/g,""));
+  return isFinite(n) ? n : NaN;
+}
+function validate(rows){
+  const valid = [], errors = [], seen = new Set();
+  rows.forEach((r,i)=>{
+    const line = `Row ${i+1}`;
+    const id = expId(r.experiment ?? r.experiment_name ?? r.model_name);
+    if (!id){ errors.push(`${line}: experiment "${esc(r.experiment ?? "")}" is not one of baseline, aug_v1, v2, aug_v2.`); return; }
+    const size = toNum(r.dataset_size);
+    if (!Number.isInteger(size) || size<=0){ errors.push(`${line}: dataset_size must be a whole number.`); return; }
+    const out = {experiment:id, dataset_size:size};
+    let blank = 0, bad = [];
+    for (const m of METRICS){
+      let v = toNum(r[m.key]);
+      if (v===null){ blank++; continue; }
+      if (isNaN(v) || v<0 || v>100){ bad.push(m.label); continue; }
+      if (v>1) v = v/100;
+      out[m.key] = v;
+    }
+    if (blank===METRICS.length) return; // template row left empty: skip silently
+    if (blank || bad.length){
+      errors.push(`${line} (${EXP_BY_ID[id].name}, ${nf.format(size)}): ${blank?"missing "+METRICS.filter(m=>out[m.key]===undefined && !bad.includes(m.label)).map(m=>m.label).join(", "):""}${blank&&bad.length?"; ":""}${bad.length?"invalid "+bad.join(", "):""}. Row not shown.`);
+      return;
+    }
+    COMP.forEach(c=>{ const v=toNum(r[c.key]); if (v!==null && isFinite(v) && v>=0) out[c.key]=v; });
+    const key = id+"|"+size;
+    if (seen.has(key)){ errors.push(`${line}: duplicate ${EXP_BY_ID[id].name} at ${nf.format(size)}. The first row was kept.`); return; }
+    seen.add(key);
+    ["tp","tn","fp","fn"].forEach(k=>{ const v=toNum(r[k]); if (Number.isInteger(v) && v>=0) out[k]=v; });
+    if (Number.isInteger(out.tn) && Number.isInteger(out.fp) && out.tn+out.fp>0) out.specificity = out.tn/(out.tn+out.fp);
+    { const vf=toNum(r.best_val_f2); if (vf!==null && isFinite(vf)) out.best_val_f2 = vf>1 ? vf/100 : vf; }
+    if (r.run_id) out.run_id = String(r.run_id);
+    { const be=toNum(r.best_epoch); if (Number.isInteger(be)) out.best_epoch=be; const ae=toNum(r.actual_epochs); if (Number.isInteger(ae)) out.actual_epochs=ae; }
+    if (r.created_at) out.created_at = String(r.created_at);
+    valid.push(out);
+  });
+  return {valid, errors};
+}
+
+/* ---------- State ---------- */
+const embedded = (()=>{ try { return JSON.parse($("results-data").textContent); } catch(e){ return {results:[]}; } })();
+const state = {
+  results: [], source: "embedded", errors: [],
+  ratio: typeof embedded.positive_ratio==="number" ? embedded.positive_ratio : 0.77,
+  metric: "f2_score", comp: "training_time_min",
+  audit: embedded.audit || null,
+  shown: new Set(EXP.map(e=>e.id)),
+  gainExp: "baseline", selExp: "baseline", selSize: null
+};
+function loadInitial(){
+  const emb = validate(embedded.results || []);
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch(e){ stored = null; }
+  if (stored && Array.isArray(stored.results) && stored.results.length){
+    const v = validate(stored.results);
+    state.results = v.valid; state.errors = v.errors;
+    state.source = stored.source==="sample" ? "sample" : "imported";
+    if (stored.audit) state.audit = stored.audit;
+  } else {
+    state.results = emb.valid; state.errors = emb.errors; state.source = "embedded";
+  }
+}
+function persist(){
+  try {
+    if (state.source==="embedded") localStorage.removeItem(STORE_KEY);
+    else localStorage.setItem(STORE_KEY, JSON.stringify({source:state.source, results:state.results, audit:state.audit}));
+  } catch(e){ /* storage unavailable: session-only */ }
+}
+const byExp = id => state.results.filter(r=>r.experiment===id).sort((a,b)=>a.dataset_size-b.dataset_size);
+const find = (id,size) => state.results.find(r=>r.experiment===id && r.dataset_size===size);
+function refValue(metric){
+  const p = state.ratio;
+  return {accuracy:p, precision:p, recall:1, f1_score:2*p/(p+1), f2_score:5*p/(4*p+1), specificity:0}[metric];
+}
+const metricLabel = k => METRICS_ALL.find(m=>m.key===k).label;
+
+/* ---------- Rendering ---------- */
+function renderStatus(){
+  const s = $("status"), n = state.results.length;
+  s.className = "status" + (state.source==="sample" ? " sample" : n ? " ok" : "");
+  let msg;
+  if (state.source==="sample") msg = `<b>Sample values shown.</b> These numbers are illustrative only and are not results from the study.`;
+  else if (!n) msg = `<b>No results loaded yet.</b> Load the final metrics to fill in the charts and tables.`;
+  else msg = `<b>${n} result record${n===1?"":"s"}</b> ${state.source==="imported"?"loaded in this browser":"published with this page"}, covering ${EXP.filter(e=>byExp(e.id).length).map(e=>esc(e.name)).join(", ")}.`;
+  const errs = state.errors.length ? ` <span style="color:var(--bad)">${state.errors.length} row${state.errors.length===1?"":"s"} skipped, see Load results.</span>` : "";
+  const act = (state.source==="sample"||!n) ? `<a class="btn" href="#data" id="status-load">Load results</a>` : "";
+  s.innerHTML = `<span class="dot"></span><span class="grow">${msg}${errs}</span>${act}`;
+  const a = $("status-load"); if (a) a.addEventListener("click",()=>{ $("loader").open = true; });
+}
+
+function renderLegend(){
+  $("legend").innerHTML = EXP.map(e=>`<button type="button" data-id="${e.id}" aria-pressed="${state.shown.has(e.id)}">${markerIcon(e)}${esc(e.name)}</button>`).join("");
+  $("legend").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    const id = b.dataset.id;
+    state.shown.has(id) ? state.shown.delete(id) : state.shown.add(id);
+    renderLegend(); renderCurve();
+  }));
+}
+
+function svgRoot(host, w, h, label){
+  host.innerHTML = "";
+  const svg = el("svg",{viewBox:`0 0 ${w} ${h}`, role:"img", "aria-label":label}, host);
+  return svg;
+}
+function emptyChart(host, msg){ host.innerHTML = `<div class="empty">${msg}</div>`; }
+
+function niceStep(raw){ const p=Math.pow(10,Math.floor(Math.log10(raw))); const f=raw/p; return (f<=1?1:f<=2?2:f<=5?5:10)*p; }
+function lineChart(host, series, key, o){
+  const W=760, H=380, m={l:o.percent?56:70,r:22,t:18,b:48};
+  const allSizes = [...new Set(series.flatMap(s=>s.pts.map(p=>p.dataset_size)))].sort((a,b)=>a-b);
+  const xs0 = Math.log(Math.min(...allSizes)), xs1 = Math.log(Math.max(...allSizes));
+  const span = xs1-xs0 || 1, pad = span*0.05;
+  const x = v => m.l + (Math.log(v)-xs0+pad)/(span+2*pad)*(W-m.l-m.r);
+  const vals = series.flatMap(s=>s.pts.map(p=>p[key]));
+  if (o.ref!=null) vals.push(o.ref);
+  let y0, y1, step;
+  if (o.percent){
+    y0 = Math.max(0, Math.floor((Math.min(...vals)-0.02)*20)/20);
+    y1 = Math.min(1, Math.ceil((Math.max(...vals)+0.01)*20)/20);
+    if (y1-y0 < 0.1) y0 = Math.max(0, y1-0.1);
+    step = (y1-y0) > 0.3 ? 0.1 : 0.05;
+  } else {
+    const mx = Math.max(...vals) || 1;
+    step = niceStep(mx/4); y0 = 0; y1 = Math.ceil(mx*1.08/step)*step;
+  }
+  const y = v => m.t + (1-(v-y0)/(y1-y0))*(H-m.t-m.b);
+  const svg = svgRoot(host, W, H, o.label);
+  const first = Math.ceil(y0/step-1e-9);
+  for (let i=first; i*step <= y1+1e-9; i++){
+    const v = i*step;
+    el("line",{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),style:"stroke:var(--line)","stroke-width":1},svg);
+    el("text",{x:m.l-8,y:y(v)+4,"text-anchor":"end"},svg).textContent = o.tick(v);
+  }
+  allSizes.forEach(s=>{
+    el("line",{x1:x(s),x2:x(s),y1:H-m.b,y2:H-m.b+5,style:"stroke:var(--muted)"},svg);
+    el("text",{x:x(s),y:H-m.b+19,"text-anchor":"middle"},svg).textContent = sizeLabel(s);
+  });
+  el("line",{x1:m.l,x2:W-m.r,y1:H-m.b,y2:H-m.b,style:"stroke:var(--muted)"},svg);
+  el("text",{x:(m.l+W-m.r)/2,y:H-6,"text-anchor":"middle"},svg).textContent = "Total dataset size (images, log scale)";
+  if (o.ref!=null && o.ref>=y0 && o.ref<=y1){
+    el("line",{x1:m.l,x2:W-m.r,y1:y(o.ref),y2:y(o.ref),style:"stroke:var(--rip)","stroke-width":1.5,"stroke-dasharray":"6 5"},svg);
+    el("text",{x:W-m.r-4,y:y(o.ref)-6,"text-anchor":"end",style:"fill:var(--rip)"},svg).textContent = o.refLabel;
+  }
+  series.forEach(({e,pts})=>{
+    const d = pts.map((p,i)=>(i?"L":"M")+x(p.dataset_size).toFixed(1)+","+y(p[key]).toFixed(1)).join("");
+    el("path",{d,fill:"none",style:`stroke:var(--c-${e.id})`,"stroke-width":2.5,"stroke-linejoin":"round"},svg);
+    pts.forEach(p=>{
+      const mk = el("path",{d:markerPath(e.marker,x(p.dataset_size),y(p[key]),5.5),style:`fill:var(--c-${e.id});stroke:var(--surface)`,"stroke-width":1.5},svg);
+      el("title",{},mk).textContent = `${e.name}, ${nf.format(p.dataset_size)} images: ${o.tip(p[key])}`;
+    });
+  });
+}
+
+function renderCurve(){
+  const host = $("curve"), metric = state.metric;
+  $("curve-title").textContent = `Learning curve: ${metricLabel(metric)}`;
+  const series = EXP.filter(e=>state.shown.has(e.id)).map(e=>({e, pts: byExp(e.id).filter(p=>p[metric]!=null)})).filter(s=>s.pts.length);
+  if (!series.length){ emptyChart(host, state.results.length ? "Turn on at least one experiment to draw the curve." : "The learning curve appears here once results are loaded."); return; }
+  const ref = refValue(metric);
+  lineChart(host, series, metric, {percent:true, label:`${metricLabel(metric)} by dataset size`,
+    tick:v=>Math.round(v*100)+"%", tip:pct, ref, refLabel:`Always predicts rip: ${(ref*100).toFixed(1)}%`});
+}
+
+function renderCompute(){
+  const c = COMP.find(k=>k.key===state.comp), host = $("comp-chart");
+  $("comp-title").textContent = c.label;
+  const series = EXP.map(e=>({e, pts: byExp(e.id).filter(r=>r[c.key]!=null)})).filter(s=>s.pts.length);
+  if (!series.length){ emptyChart(host, state.results.length ? `No ${c.label.toLowerCase()} values in the loaded results yet. Add the ${c.key} column to include them.` : "Training time, inference time, and throughput appear here once results are loaded."); return; }
+  lineChart(host, series, c.key, {percent:false, label:`${c.label} by dataset size`, tick:c.tick, tip:c.tip});
+  host.insertAdjacentHTML("beforeend", `<div class="legend" style="margin-top:8px">${series.map(s=>`<span class="meta" style="display:inline-flex;gap:6px;align-items:center;margin-right:12px">${markerIcon(s.e)}${esc(s.e.name)}</span>`).join("")}</div>`);
+}
+
+function renderAudit(){
+  const host = $("fpv");
+  let list = state.audit && Array.isArray(state.audit.frames_per_video) ? state.audit.frames_per_video : null;
+  if (list) list = list.map((v,i)=>typeof v==="number" ? {video:"Video "+(i+1), frames:v} : {video:String(v.video ?? v.name ?? ("Video "+(i+1))), frames:Number(v.frames ?? v.count)}).filter(v=>isFinite(v.frames) && v.frames>=0);
+  if (!list || !list.length){ emptyChart(host, "Per-video frame counts appear here once they are added to the results file as audit.frames_per_video."); return; }
+  const sorted = list.slice().sort((a,b)=>b.frames-a.frames);
+  const vals = sorted.map(v=>v.frames).slice().sort((a,b)=>a-b);
+  const median = vals.length%2 ? vals[(vals.length-1)/2] : (vals[vals.length/2-1]+vals[vals.length/2])/2;
+  const top = sorted.slice(0,15);
+  const rowH = 24, W = 760, m = {l:170, r:60, t:10, b:30}, H = m.t + m.b + top.length*rowH;
+  const mx = top[0].frames || 1;
+  const x = v => m.l + v/mx*(W-m.l-m.r);
+  const svg = svgRoot(host, W, H, "Frames contributed by the top source videos");
+  top.forEach((v,i)=>{
+    const yy = m.t + i*rowH;
+    const lab = v.video.length>24 ? v.video.slice(0,23)+"…" : v.video;
+    el("text",{x:m.l-8,y:yy+rowH*0.65,"text-anchor":"end"},svg).textContent = lab;
+    const r = el("rect",{x:m.l,y:yy+4,width:Math.max(1,x(v.frames)-m.l),height:rowH-8,rx:2,style:"fill:var(--rip)"},svg);
+    el("title",{},r).textContent = `${v.video}: ${nf.format(v.frames)} frames`;
+    el("text",{x:x(v.frames)+6,y:yy+rowH*0.65,style:"fill:var(--ink)"},svg).textContent = nf.format(v.frames);
+  });
+  if (median <= mx){
+    el("line",{x1:x(median),x2:x(median),y1:m.t,y2:H-m.b+4,style:"stroke:var(--ink)","stroke-dasharray":"4 4"},svg);
+    el("text",{x:x(median)+4,y:H-m.b+18,style:"fill:var(--ink)"},svg).textContent = `Median across ${nf.format(list.length)} videos: ${nf.format(median)}`;
+  }
+}
+
+function renderGains(){
+  const host = $("gains"), metric = state.metric, pts = byExp(state.gainExp).filter(p=>p[metric]!=null);
+  if (pts.length < 2){ emptyChart(host, state.results.length ? `${esc(EXP_BY_ID[state.gainExp].name)} needs results at two or more sizes.` : "Step-by-step gains appear here once results are loaded."); return; }
+  const steps = pts.slice(1).map((p,i)=>({label:`${sizeLabel(pts[i].dataset_size)}→${sizeLabel(p.dataset_size)}`, d:p[metric]-pts[i][metric]}));
+  const W=520, H=300, m={l:48,r:12,t:22,b:46};
+  const maxAbs = Math.max(0.005, ...steps.map(s=>Math.abs(s.d)));
+  const hasNeg = steps.some(s=>s.d<0);
+  const top = maxAbs*1.15, bot = hasNeg ? -maxAbs*1.15 : 0;
+  const y = v => m.t + (top-v)/(top-bot)*(H-m.t-m.b);
+  const bw = (W-m.l-m.r)/steps.length;
+  const svg = svgRoot(host, W, H, `Change in ${metricLabel(metric)} between consecutive sizes`);
+  [top, top/2, 0, bot/2, bot].filter((v,i,a)=>a.indexOf(v)===i && v>=bot).forEach(v=>{
+    el("line",{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),style:`stroke:var(--${v===0?"muted":"line"})`},svg);
+    const t = el("text",{x:m.l-6,y:y(v)+4,"text-anchor":"end"},svg); t.textContent = (v*100).toFixed(1);
+  });
+  steps.forEach((s,i)=>{
+    const x0 = m.l + i*bw + bw*0.18, w = bw*0.64;
+    const yTop = y(Math.max(0,s.d)), h = Math.abs(y(s.d)-y(0));
+    const r = el("rect",{x:x0,y:yTop,width:w,height:Math.max(h,1),rx:2,style:`fill:var(--${s.d>=0?"c-"+state.gainExp:"bad"})`},svg);
+    el("title",{},r).textContent = `${s.label}: ${pts2(s.d)} points`;
+    const lt = el("text",{x:x0+w/2,y:s.d>=0?yTop-5:yTop+h+13,"text-anchor":"middle",style:"fill:var(--ink)"},svg);
+    lt.textContent = pts2(s.d);
+    const xt = el("text",{x:x0+w/2,y:H-m.b+18,"text-anchor":"middle"},svg); xt.textContent = s.label;
+  });
+  const yl = el("text",{x:14,y:(m.t+H-m.b)/2,"text-anchor":"middle",transform:`rotate(-90 14 ${(m.t+H-m.b)/2})`},svg);
+  yl.textContent = "Percentage points";
+  function pts2(v){ return (v>0?"+":v<0?"−":"")+Math.abs(v*100).toFixed(2); }
+}
+
+function renderSelected(){
+  const out = $("sel-out"), rows = byExp(state.selExp);
+  const sizeSel = $("sel-size");
+  if (!rows.length){ sizeSel.innerHTML = `<option>None</option>`; sizeSel.disabled = true;
+    out.innerHTML = `<div class="empty">${state.results.length ? "No results for this experiment yet." : "Metrics appear here once results are loaded."}</div>`; return; }
+  sizeSel.disabled = false;
+  if (!rows.some(r=>r.dataset_size===state.selSize)) state.selSize = rows[rows.length-1].dataset_size;
+  sizeSel.innerHTML = rows.map(r=>`<option value="${r.dataset_size}" ${r.dataset_size===state.selSize?"selected":""}>${nf.format(r.dataset_size)} images</option>`).join("");
+  const r = find(state.selExp, state.selSize);
+  let html = `<div class="cards">${METRICS_ALL.filter(mm=>r[mm.key]!=null).map(mm=>`<div class="card${mm.key==="f2_score"?" key":""}"><span>${mm.label}</span><b class="num">${pct(r[mm.key])}</b></div>`).join("")}</div>`;
+  if (["tp","tn","fp","fn"].every(k=>Number.isInteger(r[k]))){
+    html += `<div class="meta" style="font-weight:600">Confusion matrix (test set)</div>
+    <div class="cm" role="table" aria-label="Confusion matrix">
+      <div></div><div class="h">Predicted rip</div><div class="h">Predicted non-rip</div>
+      <div class="h" style="text-align:right">Actual rip</div><div class="v hit">${nf.format(r.tp)} <span class="meta">TP</span></div><div class="v miss">${nf.format(r.fn)} <span class="meta">FN, missed</span></div>
+      <div class="h" style="text-align:right">Actual non-rip</div><div class="v miss">${nf.format(r.fp)} <span class="meta">FP, false alarm</span></div><div class="v hit">${nf.format(r.tn)} <span class="meta">TN</span></div>
+    </div>`;
+  }
+  const compBits = COMP.filter(c=>r[c.key]!=null).map(c=>`${c.label}: ${c.tip(r[c.key])}`);
+  if (compBits.length) html += `<p class="meta" style="margin-top:10px">${compBits.join("; ")}</p>`;
+  const meta = [r.best_epoch!=null?`Best epoch ${r.best_epoch}${r.actual_epochs!=null?` of ${r.actual_epochs} run`:""}`:"", r.run_id?`Run ${esc(r.run_id)}`:"", r.created_at?esc(r.created_at):""].filter(Boolean).join(", ");
+  if (r.best_val_f2!=null) html += `<p class="meta" style="margin-top:6px">Validation F2 at the saved epoch: ${pct(r.best_val_f2)}</p>`;
+  if (meta) html += `<p class="meta" style="margin-top:10px">${meta}</p>`;
+  out.innerHTML = html;
+}
+
+function renderFullTable(){
+  const host = $("full-table");
+  if (!state.results.length){ host.innerHTML = `<div class="empty">The complete table of results appears here once results are loaded.</div>`; return; }
+  const compCols = COMP.filter(c=>state.results.some(r=>r[c.key]!=null));
+  let body = "";
+  EXP.forEach(e=>{
+    const rows = byExp(e.id); if (!rows.length) return;
+    const cols = METRICS_ALL.filter(mm=>state.results.some(r=>r[mm.key]!=null));
+    const best = {}; cols.forEach(mm=>best[mm.key]=Math.max(...rows.map(r=>r[mm.key]??-1)));
+    rows.forEach((r,i)=>{
+      body += `<tr class="${i===0?"group-start":""}"><td>${i===0?`<span style="display:inline-flex;gap:7px;align-items:center">${markerIcon(e)}${esc(e.name)}</span>`:""}</td><td class="num">${nf.format(r.dataset_size)}</td>${cols.map(mm=>`<td class="num${r[mm.key]===best[mm.key]&&rows.length>1?" best":""}">${pct(r[mm.key])}</td>`).join("")}${compCols.map(c=>`<td class="num">${r[c.key]!=null?c.tip(r[c.key]):"—"}</td>`).join("")}</tr>`;
+    });
+  });
+  host.innerHTML = `<table><thead><tr><th>Experiment</th><th>Dataset size</th>${METRICS_ALL.filter(mm=>state.results.some(r=>r[mm.key]!=null)).map(mm=>`<th>${mm.label}</th>`).join("")}${compCols.map(c=>`<th>${c.label}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderEffects(){
+  const metric = state.metric, host = $("effects-table");
+  $("effects-metric").textContent = metricLabel(metric);
+  if (!state.results.length){ host.innerHTML = `<div class="empty">Differences between experiments appear here once results are loaded.</div>`; return; }
+  const sizes = SIZES_V2;
+  const rows = COMPARISONS.map(c=>{
+    const a=EXP_BY_ID[c.from], b=EXP_BY_ID[c.to];
+    const cells = sizes.map(s=>{
+      const ra=find(c.from,s), rb=find(c.to,s);
+      if (!ra||!rb) return `<td class="num meta">—</td>`;
+      const d = rb[metric]-ra[metric];
+      return `<td class="num delta ${d>0?"pos":d<0?"neg":""}">${pts(d)}</td>`;
+    }).join("");
+    const cross = a.pipeline!==b.pipeline ? ` <span class="meta">(different test images)</span>` : "";
+    return `<tr><td><span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap">${markerIcon(a)}${esc(a.name)} <span class="meta">to</span> ${markerIcon(b)}${esc(b.name)}${cross}</span><div class="meta">${esc(c.measures)}</div></td>${cells}</tr>`;
+  }).join("");
+  host.innerHTML = `<table><thead><tr><th>Comparison</th>${sizes.map(s=>`<th>${nf.format(s)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderErrors(){
+  $("load-errors").innerHTML = state.errors.map(e=>`<li>${e}</li>`).join("");
+}
+function renderAll(){ renderStatus(); renderCurve(); renderCompute(); renderAudit(); renderGains(); renderSelected(); renderFullTable(); renderEffects(); renderErrors(); }
+
+/* ---------- Controls ---------- */
+$("metric-select").innerHTML = METRICS_ALL.map(m=>`<option value="${m.key}" ${m.key===state.metric?"selected":""}>${m.label}</option>`).join("");
+$("metric-select").addEventListener("change",e=>{ state.metric = e.target.value; renderCurve(); renderGains(); renderEffects(); });
+$("comp-select").innerHTML = COMP.map(c=>`<option value="${c.key}">${c.label}</option>`).join("");
+$("comp-select").addEventListener("change",e=>{ state.comp = e.target.value; renderCompute(); });
+$("exp-table").innerHTML = EXP.map(e=>`<tr><td><span style="display:inline-flex;gap:7px;align-items:center">${markerIcon(e)}${esc(e.name)}</span></td><td style="text-align:left">${e.pipeline==="original"?"Original dataset":"Video-balanced dataset (V2)"}</td><td style="text-align:left">${e.training==="standard"?"Standard training":"Augmented training"}</td><td class="num">${"8 sizes, 500 to 20k"}</td></tr>`).join("");
+const expOpts = EXP.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("");
+$("gain-exp").innerHTML = expOpts; $("sel-exp").innerHTML = expOpts;
+$("gain-exp").addEventListener("change",e=>{ state.gainExp = e.target.value; renderGains(); });
+$("sel-exp").addEventListener("change",e=>{ state.selExp = e.target.value; renderSelected(); });
+$("sel-size").addEventListener("change",e=>{ state.selSize = Number(e.target.value); renderSelected(); });
+
+function applyText(text, source){
+  try {
+    const {rows, ratio, audit} = parseInput(text);
+    const v = validate(rows);
+    if (!v.valid.length){
+      state.errors = v.errors.length ? v.errors : ["No rows with all five metrics were found. Check the column names against the template."];
+      renderErrors(); return;
+    }
+    state.results = v.valid; state.errors = v.errors; state.source = source;
+    if (typeof ratio==="number" && ratio>0 && ratio<1) state.ratio = ratio;
+    if (audit) state.audit = audit;
+    persist(); renderAll();
+    document.getElementById("results").scrollIntoView();
+  } catch(err){
+    state.errors = ["Could not read that input: " + esc(err.message) + ". Use CSV with a header row, or JSON with a results array."];
+    renderErrors();
+  }
+}
+$("btn-load").addEventListener("click",()=>applyText($("paste-in").value,"imported"));
+$("file-in").addEventListener("change",e=>{
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { $("paste-in").value = rd.result; applyText(String(rd.result),"imported"); };
+  rd.onerror = () => { state.errors = ["That file could not be opened."]; renderErrors(); };
+  rd.readAsText(f);
+  e.target.value = "";
+});
+$("btn-reset").addEventListener("click",()=>{
+  const emb = validate(embedded.results || []);
+  state.results = emb.valid; state.errors = emb.errors; state.source = "embedded"; state.audit = embedded.audit || null;
+  persist(); renderAll();
+});
+$("btn-copy").addEventListener("click",async()=>{
+  const json = JSON.stringify({positive_ratio: state.ratio, results: state.results, audit: state.audit || undefined}, null, 2);
+  const btn = $("btn-copy");
+  try { await navigator.clipboard.writeText(json); btn.textContent = "Copied"; }
+  catch(e){ $("paste-in").value = json; $("paste-in").select(); btn.textContent = "Selected in the box above"; }
+  setTimeout(()=>{ btn.textContent = "Copy current results as JSON"; }, 2200);
+});
+$("btn-sample").addEventListener("click",()=>{
+  // Illustrative shapes only. Clearly flagged as sample in the interface.
+  const caps = {baseline:.93, aug_v1:.945, v2:.86, aug_v2:.89};
+  const rows = [];
+  EXP.forEach(e=>{
+    const sizes = e.pipeline==="original" ? SIZES_ORIGINAL : SIZES_V2;
+    sizes.forEach(s=>{
+      const g = 1-Math.exp(-s/2800);
+      const P = Math.min(.99, .80 + (caps[e.id]+.01-.80)*g);
+      const R = Math.min(.995, .86 + (caps[e.id]+.04-.86)*g);
+      const A = .74 + (caps[e.id]-.02-.74)*g;
+      const inf = 2 + (e.training==="augmented"?0.05:0) + s/200000;
+      rows.push({experiment:e.id, dataset_size:s, accuracy:A, precision:P, recall:R, f1_score:2*P*R/(P+R), f2_score:5*P*R/(4*P+R),
+        training_time_min: s/20000*(e.training==="augmented"?38:30)+1.5, inference_ms: inf, fps: 1000/inf});
+    });
+  });
+  state.results = rows; state.errors = []; state.source = "sample";
+  persist(); renderAll();
+  document.getElementById("results").scrollIntoView();
+});
+
+loadInitial();
+renderLegend();
+renderAll();
+})();
+</script>
+</body>
+</html>
