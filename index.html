@@ -281,9 +281,9 @@ dl.spec dd{margin:0;font-weight:600}
       <div><b>Data</b>RipVIS, nested sets of 500 to 20,000 images</div>
     </div>
     <div class="abs-body">
-      <p>Rip currents are hazardous coastal phenomena that require efficient detection systems to support coastal safety efforts. This study investigates the performance of a lightweight deep learning model for binary rip current classification using incrementally increasing dataset sizes.</p>
-      <p>A MobileNetV3-Large architecture was evaluated across eight dataset sizes ranging from 500 to 20,000 images. The study examines the influence of dataset scaling, dataset construction strategy, and training optimization techniques on classification performance and computational efficiency.</p>
-      <p>Four experimental configurations were compared: baseline training, augmented training, improved dataset construction, and combined dataset-training optimization.</p>
+      <p>Rip currents are a leading cause of surf-zone rescues, yet beachgoers rarely recognize them. This study evaluated how the amount and construction of labeled training data affect a lightweight convolutional neural network for binary rip current classification. MobileNetV3-Large, initialized with ImageNet weights, was fine-tuned on eight nested datasets of 500 to 20,000 frames derived from the RipVIS benchmark, each with a 77:23 rip to non-rip ratio and a 70/15/15 split. Four configurations were compared: a baseline, the baseline with augmentation and regularization, a video-balanced dataset (V2), and the video-balanced dataset with augmentation.</p>
+      <p>Performance did not follow a pattern of steadily diminishing gains. No configuration achieved its best F2-score at 20,000 images, and three of the four peaked between 1,000 and 2,500 images. The baseline reached its highest F2-score, 98.70%, at 2,500 images. The video-balanced dataset with augmentation gave the strongest results overall, including 99.97% F2 and 99.87% accuracy at 5,000 images. At 500 and 1,000 images, however, models trained on the video-balanced data classified every image as a rip current, showing that very small, imbalanced datasets can collapse to the majority class. Inference took about 8 to 9 ms per frame (105 to 127 frames per second) on an NVIDIA RTX 3050, with a 48.5 MB checkpoint.</p>
+      <p>The results suggest that how a dataset is constructed matters as much as its size, and that moderate datasets may be sufficient for lightweight rip current classifiers under the conditions tested. Because each condition was trained once and the test sets drew on a small number of videos, these findings should be confirmed with repeated runs and broader coastal data.</p>
     </div>
   </div>
 </section>
@@ -295,7 +295,7 @@ dl.spec dd{margin:0;font-weight:600}
         <h2>Why dataset size, not a bigger model</h2>
       </div>
       <p>Rip currents cause most surf-zone rescues, yet beachgoers rarely recognize them. Deep learning can spot them in coastal imagery, but most published work relies on heavy models and very large annotated datasets.</p>
-      <p>This study holds the model fixed and varies only the amount of labeled data. MobileNetV3-Large, initialized with ImageNet weights, is fine-tuned as a binary classifier (Rip Current vs Non-Rip Current) under identical preprocessing, training, and evaluation at every dataset size. The aim is to see how performance grows with data and where additional images start returning smaller gains.</p>
+      <p>This study holds the model fixed and varies only the amount of labeled data. MobileNetV3-Large, initialized with ImageNet weights, is fine-tuned as a binary classifier (Rip Current vs Non-Rip Current) under identical preprocessing, training, and evaluation at every dataset size. The aim is to see how performance changes with data and whether additional images return smaller gains.</p>
     </div>
     <div>
       <h3 style="margin-bottom:12px">How performance is measured</h3>
@@ -325,39 +325,49 @@ dl.spec dd{margin:0;font-weight:600}
       <h2>Two ways of building the datasets</h2>
       <p>Every dataset is nested: each smaller set is fully contained in the next larger one, so a change in performance reflects added data rather than a different random draw.</p>
     </div>
+    <div class="panel">
+      <h3>Shared by both pipelines</h3>
+      <ol class="steps" style="margin-top:12px">
+        <li><div><b>Extract RipVIS's sampled frames</b><span>Only the frames listed in each split's COCO annotation file are read from the videos with OpenCV, then resized to 224 × 224 with aspect ratio preserved and black padding.</span></div></li>
+        <li><div><b>Label by source video</b><span>Frames from videos named RipVIS-NR are Non-Rip Current; all others are Rip Current, the positive class.</span></div></li>
+        <li><div><b>Exclude four videos</b><span>RipVIS-070, 071, 110 and 125 are removed because on-screen subtitles or watermarks could become shortcuts unrelated to rip currents.</span></div></li>
+        <li><div><b>Assign each video to one split</b><span>Frames from all RipVIS splits are pooled, then each video goes to exactly one of train, validation or test, largest videos first, into the split furthest below its 20,000-image quota (seed 42). Both pipelines use this identical assignment, so neither has video leakage.</span></div></li>
+      </ol>
+    </div>
     <div class="pipes">
       <div class="pipe">
         <h3>Original pipeline</h3>
         <div class="sub">Frames are the sampling unit. Eight nested sizes, 77% Rip Current to 23% Non-Rip Current, split 70 / 15 / 15.</div>
         <ol class="flow" aria-label="Original dataset pipeline">
-          <li>RipVIS dataset</li><li>COCO annotations</li><li>Frame extraction</li><li>Fill each quota video by video</li><li>Nested selection</li><li class="end">500 to 20,000</li>
+          <li>Video-level split</li><li>Shuffle all frames in each split</li><li>Take the first N per class</li><li class="end">500 to 20,000</li>
         </ol>
-        <p class="pipe-text">Frames were extracted using the provided COCO annotations and sorted into rip-current and non-rip-current classes. Each class quota was then filled one video at a time, taking that video's frames in order before moving to the next. The first videos in line therefore supplied most of the images, and smaller datasets drew on only a few clips.</p>
+        <p class="pipe-text">Within each split, the frames of all assigned videos are shuffled at random (seed 42), and each dataset takes the first frames of that order up to its class quota. Every frame has the same chance of selection, so each video's share follows its length: long clips dominate, and short clips contribute only a few frames.</p>
         <div class="nest" id="nest-original"></div>
         <div class="table-wrap">
           <table aria-label="Class distribution and partitioning of the original datasets">
-            <caption class="meta" style="caption-side:bottom;text-align:left;padding-top:8px">Partitions for the four proposal sizes. The added 500 to 2,000 sets follow the same 70 / 15 / 15 split.</caption><thead><tr><th>Dataset</th><th>Split</th><th>Rip</th><th>Non-rip</th><th>Total</th></tr></thead>
+            <caption class="meta" style="caption-side:bottom;text-align:left;padding-top:8px">Exact counts from the dataset-building scripts, identical in both pipelines.</caption><thead><tr><th>Dataset</th><th>Split</th><th>Rip</th><th>Non-rip</th><th>Total</th></tr></thead>
             <tbody id="table2"></tbody>
           </table>
         </div>
         <h4>Limitations found</h4>
         <div class="limits">
-          <div class="limit"><b>Video contribution imbalance</b><span>Filling quotas video by video let one clip supply dozens of frames while others supplied few or none.</span></div>
+          <div class="limit"><b>Video contribution imbalance</b><span>Random sampling in proportion to clip length let one video supply 2,126 frames of the 20,000-image dataset while the median video supplied 45.</span></div>
           <div class="limit"><b>Temporal similarity</b><span>Frames from the same clip are often close in time and look almost the same.</span></div>
           <div class="limit"><b>Potential dataset bias</b><span>A bigger dataset could mean more frames of the same scenes without a matching increase in visual variety.</span></div>
         </div>
       </div>
       <div class="pipe">
         <h3>V2 pipeline</h3>
-        <div class="sub">Every dataset draws the same number of frames from the same set of videos. Eight nested sizes.</div>
+        <div class="sub">Frames are spread evenly across videos and across each clip. Eight nested sizes.</div>
         <ol class="flow" aria-label="V2 dataset pipeline">
-          <li>RipVIS dataset</li><li>Source videos</li><li>Video-level split</li><li>Balanced video sampling</li><li>Nested dataset creation</li><li class="end">500 to 20,000</li>
+          <li>Video-level split</li><li>Even quota per video</li><li>Evenly spaced frames per clip</li><li>Round-robin across videos</li><li class="end">500 to 20,000</li>
         </ol>
-        <p class="pipe-text">Instead of filling quotas one video at a time, V2 takes an equal share of frames from each source video, so every dataset size covers the same range of scenes. Both pipelines draw their test images from the same source videos; what changed is how evenly those videos are represented.</p>
+        <p class="pipe-text">V2 divides the 20,000-image quota as evenly as possible across the videos in each split and spaces each video's frames across its full length. It then takes frames from the videos in turn, and each smaller dataset is the front of that sequence. Every size therefore draws on every assigned video, though the smaller sets hold only the earliest selected frames of each clip.</p>
         <div class="nest" id="nest-v2"></div>
         <ol class="steps">
-          <li><div><b>Keep each video in one split</b><span>Every frame of a video stays in exactly one of train, validation, or test, so the model is never tested on a clip it trained on.</span></div></li>
-          <li><div><b>Take an equal share from every video</b><span>Each video contributes the same number of frames, so no single clip dominates a dataset and small datasets still cover every scene.</span></div></li>
+          <li><div><b>Keep the same video split</b><span>V2 reuses the original assignment exactly, so the only change is how frames are chosen inside each video.</span></div></li>
+          <li><div><b>Share frames evenly across videos</b><span>Each video receives an equal quota where it has enough frames, so no single clip dominates and small datasets still cover every scene.</span></div></li>
+          <li><div><b>Space frames through each clip</b><span>Selected frames are spread from the start to the end of each video, then interleaved across videos so smaller datasets stay nested prefixes.</span></div></li>
           <li><div><b>Grow the nested sets</b><span>500 ⊂ 1,000 ⊂ 1,500 ⊂ 2,000 ⊂ 2,500 ⊂ 5,000 ⊂ 10,000 ⊂ 20,000 images, with extra small sizes to see the early part of the learning curve.</span></div></li>
           <li><div><b>Audit before training</b><span>Automated checks confirm the dataset is sound before any model sees it.</span></div></li>
         </ol>
@@ -448,30 +458,35 @@ dl.spec dd{margin:0;font-weight:600}
           <dt>Optimizer</dt><dd>Adam</dd>
           <dt>Loss</dt><dd>BCEWithLogitsLoss</dd>
           <dt>Learning rate</dt><dd class="num">0.0001</dd>
-          <dt>Evaluation</dt><dd>Accuracy, Precision, Recall, F1, F2</dd>
+          <dt>Batch size</dt><dd class="num">32</dd>
+          <dt>Epochs</dt><dd>20, fixed for every size</dd>
+          <dt>Checkpoint kept</dt><dd>Highest validation F2</dd>
+          <dt>Classifier dropout</dt><dd>0.2 (TorchVision default)</dd>
+          <dt>Weights</dt><dd>ImageNet (IMAGENET1K_V2)</dd>
+          <dt>Evaluation</dt><dd>Accuracy, Precision, Recall, F1, F2, specificity</dd>
         </dl>
       </div>
       <div class="pipe">
         <h3>Augmented pipeline</h3>
-        <div class="sub">Used by Augmentation V1 and Augmentation V2.</div>
+        <div class="sub">Used by Augmentation V1 and Augmentation V2. Batch size 32, learning rate 0.0001 at start.</div>
         <ol class="vflow" aria-label="Augmented training pipeline">
           <li>Input image</li>
           <li class="hl">Training augmentation
-            <ul><li>Random horizontal flip</li><li>Random rotation</li><li>Color jitter</li></ul>
+            <ul><li>Random horizontal flip, p = 0.5</li><li>Random rotation, ±10°</li><li>Colour jitter: brightness, contrast, saturation 0.2</li></ul>
           </li>
           <li>Resize with padding, ImageNet normalization</li>
-          <li class="model">MobileNetV3-Large with dropout 0.3</li>
+          <li class="model">MobileNetV3-Large, classifier dropout raised to 0.3</li>
           <li>Rip or non-rip prediction</li>
         </ol>
         <h4>Additional optimization</h4>
         <div class="opt-cards">
           <div class="opt"><b>Dropout regularization</b>
             <dl class="spec"><dt>Dropout</dt><dd class="num">0.3</dd></dl>
-            <p>Reduces overfitting by preventing the model from depending on specific features.</p></div>
+            <p>Raised from TorchVision's default of 0.2 to reduce overfitting.</p></div>
           <div class="opt"><b>Early stopping</b>
             <dl class="spec"><dt>Monitor</dt><dd>Validation F2</dd><dt>Patience</dt><dd>7 epochs</dd><dt>Max epochs</dt><dd>50</dd></dl></div>
           <div class="opt"><b>Learning rate scheduling</b>
-            <dl class="spec"><dt>Scheduler</dt><dd>ReduceLROnPlateau</dd><dt>Factor</dt><dd class="num">0.5</dd><dt>Patience</dt><dd>3 epochs</dd></dl></div>
+            <dl class="spec"><dt>Scheduler</dt><dd>ReduceLROnPlateau on validation F2</dd><dt>Factor</dt><dd class="num">0.5</dd><dt>Patience</dt><dd>3 epochs</dd></dl></div>
         </div>
       </div>
     </div>
@@ -482,12 +497,12 @@ dl.spec dd{margin:0;font-weight:600}
   <div class="wrap">
     <div class="section-head">
       <h2>Four experiments, one change at a time</h2>
-      <p>The experiments form a two-by-two design: which dataset pipeline was used, and whether stronger regularization was added. Every step between neighbouring cells changes exactly one thing.</p>
+      <p>The experiments form a two-by-two design: which dataset pipeline was used, and which training strategy. Every step between neighbouring cells changes one factor. The augmented training strategy changes several settings together: augmentation, dropout, up to 50 epochs with early stopping, and a learning-rate scheduler.</p>
     </div>
     <div class="matrix" role="table" aria-label="Experiment design">
       <div class="corner"></div>
       <div class="axis" role="columnheader">Standard fine-tuning</div>
-      <div class="axis" role="columnheader">Augmentation and dropout</div>
+      <div class="axis" role="columnheader">Augmentation and adaptive training</div>
       <div class="axis row" role="rowheader">Original datasets</div>
       <div class="cell" data-label="Original datasets, standard fine-tuning" id="cell-baseline"></div>
       <div class="cell" data-label="Original datasets, augmentation and dropout" id="cell-aug_v1"></div>
@@ -542,7 +557,7 @@ dl.spec dd{margin:0;font-weight:600}
       </div>
       <div class="panel">
         <h3>Single condition</h3>
-        <p class="note">All five metrics for one experiment at one dataset size.</p>
+        <p class="note">All metrics and the confusion matrix for one experiment at one dataset size.</p>
         <div class="controls" style="margin-bottom:0">
           <label>Experiment <select id="sel-exp"></select></label>
           <label>Dataset size <select id="sel-size"></select></label>
@@ -601,7 +616,7 @@ dl.spec dd{margin:0;font-weight:600}
     <div class="notes">
       <article>
         <h3>The pipelines weight test videos differently</h3>
-        <p>Both pipelines test on frames from the same source videos, but not the same frames. The original test sets are dominated by whichever clips came first, while V2 spreads the test images evenly across clips. A score in each pipeline therefore rewards different videos, so scaling trends are most reliable within a pipeline.</p>
+        <p>Both pipelines test on frames from the same source videos, but not the same frames. The original test sets are dominated by the longest clips, while V2 spreads the test images evenly across clips. A score in each pipeline therefore rewards different videos, so scaling trends are most reliable within a pipeline.</p>
       </article>
       <article>
         <h3>Class imbalance sets a high floor</h3>
@@ -612,12 +627,16 @@ dl.spec dd{margin:0;font-weight:600}
         <p>Each test set draws on only four non-rip videos and about twenty rip videos. In the baseline at 20,000 images, all 54 false alarms came from one non-rip video (NR-002) and 115 of the 137 missed rip currents came from one rip video (142). Shifts between sizes often reflect how those clips are handled rather than general learning.</p>
       </article>
       <article>
+        <h3>Training length differs between strategies</h3>
+        <p>Standard runs trained for a fixed 20 epochs; augmented runs could train for up to 50 with early stopping and a scheduler. The V2 model at 10,000 images reached its best validation F2 in its final epoch, so it may not have converged.</p>
+      </article>
+      <article>
         <h3>One run per condition</h3>
         <p>Each point comes from a single training run. Small differences between neighbouring sizes may fall within run-to-run variation, so the overall shape of the curve says more than any single step.</p>
       </article>
       <article>
         <h3>Scope</h3>
-        <p>Findings apply to MobileNetV3-Large on RipVIS-derived frames at the tested sizes. They do not identify a universally sufficient dataset size, and further validation is needed before applying them to other beaches or to live monitoring.</p>
+        <p>Findings apply to MobileNetV3-Large on RipVIS-derived frames at the tested sizes. Labels come from each frame's source video, so a frame from a rip-current video counts as Rip Current even if no rip is visible in it. The results do not identify a universally sufficient dataset size.</p>
       </article>
     </div>
   </div>
@@ -1314,15 +1333,15 @@ aug_v2,500,,,,,,,,,,,,</pre>
 const EXP = [
   {id:"baseline", name:"Baseline", pipeline:"original", training:"standard", marker:"circle",
    desc:"ImageNet-pretrained MobileNetV3-Large fine-tuned on the original datasets with BCEWithLogitsLoss and Adam.",
-   items:["Original datasets","No added augmentation","Fixed training schedule"],
+   items:["Original datasets","No augmentation","20 epochs, batch size 32"],
    rq:"How well does the model perform with the original pipeline?"},
   {id:"aug_v1", name:"Augmentation V1", pipeline:"original", training:"augmented", marker:"square",
-   desc:"Same data as the baseline, stronger regularization.",
-   items:["Horizontal flip, rotation, color jitter","Dropout 0.3","Up to 50 epochs, early stopping on validation F2","ReduceLROnPlateau scheduler"],
+   desc:"Same data as the baseline, augmented and adaptive training.",
+   items:["Flip, ±10° rotation, colour jitter","Dropout 0.3","Up to 50 epochs, early stopping on validation F2","ReduceLROnPlateau scheduler"],
    rq:"Can better training reduce overfitting on the same data?"},
   {id:"v2", name:"V2 Dataset", pipeline:"v2", training:"standard", marker:"triangle",
    desc:"Rebuilt datasets, training kept close to the baseline.",
-   items:["Equal frames from every video","Same videos at every size","Eight nested sizes, audited"],
+   items:["Same video split as the baseline","Frames spread evenly across videos","Frames spaced through each clip"],
    rq:"Does removing dataset bias change measured performance?"},
   {id:"aug_v2", name:"Augmentation V2", pipeline:"v2", training:"augmented", marker:"diamond",
    desc:"Rebuilt datasets combined with the stronger training setup.",
@@ -1331,9 +1350,9 @@ const EXP = [
 ];
 const EXP_BY_ID = Object.fromEntries(EXP.map(e=>[e.id,e]));
 const COMPARISONS = [
-  {from:"baseline", to:"aug_v1", measures:"Effect of the training changes alone."},
+  {from:"baseline", to:"aug_v1", measures:"Effect of the training strategy alone."},
   {from:"baseline", to:"v2", measures:"Effect of the rebuilt datasets alone."},
-  {from:"v2", to:"aug_v2", measures:"Effect of stronger training on the rebuilt data."},
+  {from:"v2", to:"aug_v2", measures:"Effect of the training strategy on the rebuilt data."},
   {from:"baseline", to:"aug_v2", measures:"Overall change from the complete revised pipeline."}
 ];
 const METRICS = [
@@ -1356,7 +1375,11 @@ const TABLE2 = [
   [20000,"Training",10782,3218,14000],[20000,"Validation",2311,689,3000],[20000,"Testing",2310,690,3000],
   [10000,"Training",5392,1608,7000],[10000,"Validation",1155,345,1500],[10000,"Testing",1155,345,1500],
   [5000,"Training",2696,804,3500],[5000,"Validation",578,172,750],[5000,"Testing",577,173,750],
-  [2500,"Training",1347,403,1750],[2500,"Validation",289,86,375],[2500,"Testing",289,86,375]
+  [2500,"Training",1347,403,1750],[2500,"Validation",289,86,375],[2500,"Testing",289,86,375],
+  [2000,"Training",1078,322,1400],[2000,"Validation",231,69,300],[2000,"Testing",231,69,300],
+  [1500,"Training",808,242,1050],[1500,"Validation",173,52,225],[1500,"Testing",173,52,225],
+  [1000,"Training",539,161,700],[1000,"Validation",116,34,150],[1000,"Testing",115,35,150],
+  [500,"Training",269,81,350],[500,"Validation",58,17,75],[500,"Testing",58,17,75]
 ];
 const STORE_KEY = "ripcurrent-thesis-results-v1";
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -1641,7 +1664,7 @@ function lineChart(host, series, key, o){
   el("text",{x:(m.l+W-m.r)/2,y:H-6,"text-anchor":"middle"},svg).textContent = "Total dataset size (images, log scale)";
   if (o.ref!=null && o.ref>=y0 && o.ref<=y1){
     el("line",{x1:m.l,x2:W-m.r,y1:y(o.ref),y2:y(o.ref),style:"stroke:var(--rip)","stroke-width":1.5,"stroke-dasharray":"6 5"},svg);
-    el("text",{x:W-m.r-4,y:y(o.ref)-6,"text-anchor":"end",style:"fill:var(--rip)"},svg).textContent = o.refLabel;
+    el("text",{x:m.l+6,y:y(o.ref)+(o.ref>=y1-0.02?16:-6),"text-anchor":"start",style:"fill:var(--rip)"},svg).textContent = o.refLabel;
   }
   series.forEach(({e,pts})=>{
     const d = pts.map((p,i)=>(i?"L":"M")+x(p.dataset_size).toFixed(1)+","+y(p[key]).toFixed(1)).join("");
